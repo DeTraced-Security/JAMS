@@ -1,0 +1,81 @@
+name: Bug Report
+description: Create a report to help us improve JAMS
+labels:
+  - bug
+body:
+  - type: textarea
+    attributes:
+      label: Describe the bug
+      description: A clear and concise description of what the bug is.
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Steps To Reproduce
+      description: Steps to reproduce the behavior.
+      placeholder: |
+        1. Start JAMS with this config...
+        2. Connect via SMTP/IMAP...
+        3. Send this command/message...
+        4. See error...
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Expected Behavior
+      description: A concise description of what you expected to happen.
+    validations:
+      required: true
+
+  - type: dropdown
+    attributes:
+      label: Affected Component
+      description: Which part of JAMS is affected?
+      multiple: true
+      options:
+        - SMTP Server (inbound)
+        - Submission Server (port 587)
+        - IMAP Server
+        - STARTTLS / TLS
+        - Maildir Storage
+        - io_uring Event Loop
+        - DNS Resolver
+        - SPF / DKIM / DMARC
+        - Admin UI
+        - Build System / CMake
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Environment
+      value: |
+        - OS: <!-- e.g. Fedora Cloud 42, Ubuntu 24.04 -->
+        - Kernel: <!-- run `uname -r` -->
+        - Compiler: <!-- run `g++ --version` or `clang++ --version` -->
+        - liburing: <!-- run `pkg-config --modversion liburing` -->
+        - OpenSSL: <!-- run `openssl version` -->
+        - JAMS commit: <!-- run `git rev-parse HEAD` -->
+        - Build type: <!-- Debug / Release -->
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Relevant Logs
+      description: |
+        Paste any JAMS console output, SMTP traces, or sanitizer output here.
+        If the issue involves TLS, include the output of `openssl s_client -starttls smtp -connect <host>:25`.
+        **Redact any real email addresses, credentials, or message content before posting.**
+      render: shell
+
+  - type: textarea
+    attributes:
+      label: Anything else?
+      description: |
+        Add any extra context here.
+        Packet captures (redacted), config snippets, or edge cases welcome.
+        If this looks like a security issue, please follow our [Security Policy](../../security/policy) instead of filing a bug report.
