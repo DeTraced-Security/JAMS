@@ -44,12 +44,12 @@ bool MailDir::deliver(
     // RFC-2822 date format:
     std::strftime(
         date_buf, sizeof(date_buf), 
-        "%a, %d %Y $H:%M:%S %z",
+        "%a, %d %b %Y %H:%M:%S %z",
         std::localtime(&now_t)
     );
 
     std::string message = "Received: from unknown (HELO unknown)\r\n"
-        "   by mail.example.com for <" + rcpt_to + ">; \r\n"
+        "   by mail.detraced.org from <" + mail_from + "> for <" + rcpt_to + ">; \r\n"
         "   " + date_buf + "\r\n" + body;
 
     // Create file and write to tmp/

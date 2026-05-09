@@ -7,13 +7,14 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <span>
 
 SMTPSession::SMTPSession(
     uint64_t conn_id, std::string remote_ip, 
     IoUringLoop& loop
 ): conn_id_(conn_id), remote_ip_(remote_ip), loop_(loop) {
     // RFC-5321 4.2: Send 220 Banner on connect
-    reply_code(220, "mail.example.com ESMTP mailserver/0.1");
+    reply_code(220, "mail.detraced.org ESMTP mailserver/0.1");
     state_ = SMTPState::Greeted; // Wait for EHLO
 }
 
@@ -73,14 +74,14 @@ void SMTPSession::process_line(std::string_view line) {
 
     auto sp = line.find(' ');
     std::string verb(line.substr(0, sp));
-    std::string_view arg = (sp != std::string_view::npos) ? line.substr(sp + 1) : '';
+    std::string_view arg = (sp != std::string_view::npos) ? line.substr(sp + 1) : std::string_view("");
 
     // normalise verb to upper-case
     for (char& c : verb) {
         c = static_cast<char>(std::toupper(c));
     }
 
-    std::cout << "[smtp: " << conn_id << "]" << line << std::endl;
+    std::cout << "[smtp: " << conn_id_ << "]" << line << std::endl;
 
     if (verb == "EHLO") {
         cmd_ehlo(arg);
@@ -110,7 +111,7 @@ void SMTPSession::cmd_ehlo(std::string_view arg) {
     env_ = {};
 
     reply_multiline(250, {
-        "mail.example.com greets " + client_helo_,
+        "mail.detraced.org greets " + client_helo_,
         "8BITMIME",
         "PIPELINING",
         "SIZE 52428800",   // 50 MB max message size
@@ -122,7 +123,7 @@ void SMTPSession::cmd_ehlo(std::string_view arg) {
 void SMTPSession::cmd_helo(std::string_view arg) {
     client_helo_ = std::string(trim(arg));
     env_ = {};
-    reply_code(250, "mail.example.com");
+    reply_code(250, "mail.detraced.org");
     state_ = SMTPState::Greeted;
 }
 
@@ -205,7 +206,7 @@ void SMTPSession::cmd_noop() {
 }
 
 void SMTPSession::cmd_quit() {
-    reply_code(221, "mail.example.com closing connection");
+    reply_code(221, "mail.detraced.org closing connection");
     state_ = SMTPState::Done;
     loop_.submit_close(conn_id_);
 }
