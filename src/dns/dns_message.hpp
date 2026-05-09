@@ -44,6 +44,6 @@ namespace DNS {
 
             // Read big endian without advancing offset
             static uint16_t read_u16(std::span<const uint8_t> wire, size_t off);
-            static uint32_t readu32(std::span<const uint8_t> wire, size_t off);
+            static uint32_t read_u32(std::span<const uint8_t> wire, size_t off);
     };
 };
