@@ -11,12 +11,16 @@ endif()
 
 add_compile_options(
     -Wall -Wextra -Wpedantic
-    $<$<CONFIG:Debug>:-g3 -O0 -fsanitize=address,undefined>
+    $<$<CONFIG:Debug>:-g3>
+    $<$<CONFIG:Debug>:-O0>
+    $<$<CONFIG:Debug>:-fsanitize=address>
+    $<$<CONFIG:Debug>:-fsanitize=undefined>
     $<$<CONFIG:Release>:-O3>
 )
 
 add_link_options(
-    $<$<CONFIG:Debug>:-fsanitize=address,undefined>
+    $<$<CONFIG:Debug>:-fsanitize=address>
+    $<$<CONFIG:Debug>:-fsanitize=undefined>
 )
 
 find_package(OpenSSL REQUIRED)
