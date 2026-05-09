@@ -29,10 +29,13 @@ find_path(LIBURING_INCLUDE_DIR liburing.h
     HINTS /usr/include /usr/local/include)
 
 find_library(LIBURING_LIBRARY uring
-    HINTS /usr/lib /usr/local/lib /usr/lib64)
+    HINTS /usr/lib /usr/local/lib /usr/lib64
+          /usr/lib/x86_64-linux-gnu)
 
 if(NOT LIBURING_INCLUDE_DIR OR NOT LIBURING_LIBRARY)
-    message(FATAL_ERROR "liburing not found. Run: sudo dnf install liburing-devel")
+    message(FATAL_ERROR "liburing not found. Install with:\n"
+        "  Fedora:  sudo dnf install liburing-devel\n"
+        "  Ubuntu:  sudo apt-get install liburing-dev")
 endif()
 
 message(STATUS "liburing: ${LIBURING_LIBRARY}")
