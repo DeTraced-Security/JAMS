@@ -70,7 +70,6 @@ std::vector<uint8_t> TlsConn::feed_encryption(std::span<const uint8_t> cipher_in
 
             // fatal error
             std::cerr << "[TLS] SSL_read error: " << buf << std::endl;
-            char buf[256] = {};
             break;
         }
     }
