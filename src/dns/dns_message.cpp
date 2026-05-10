@@ -24,6 +24,11 @@ namespace DNS {
 
         return out;
     }
+ 
+    void DNSMessage::encode_uint16(std::vector<uint8_t>& out, uint16_t v) {
+        out.push_back(static_cast<uint8_t>(v >> 8));
+        out.push_back(static_cast<uint8_t>(v & 0xFF));
+    }
 
     void DNSMessage::encode_name(std::vector<uint8_t>& out, const std::string& name) {
         // Split on '.' and emit prefixed labels
@@ -169,7 +174,7 @@ namespace DNS {
         }
 
         off += rdlen;
-        return;
+        return true;
     }
 
     bool DNSMessage::decode_name(std::span<const uint8_t> wire, size_t& off, std::string& out, int depth) {
@@ -357,10 +362,9 @@ namespace DNS {
 
     uint32_t DNSMessage::read_u32(std::span<const uint8_t> wire, size_t off) {
         return (static_cast<uint32_t>(wire[off]) << 24)
-            |   (static_cast<uint32_t>(wire[off + 1]) << 24)
-            |   (static_cast<uint32_t>(wire[off + 2]) << 16)
-            |   (static_cast<uint32_t>(wire[off + 3]) << 8)
-            |   (static_cast<uint32_t>(wire[off + 3]));
+            |  (static_cast<uint32_t>(wire[off + 1]) << 16)
+            |  (static_cast<uint32_t>(wire[off + 2]) <<  8)
+            |   static_cast<uint32_t>(wire[off + 3]);
     }
 
     std::string RDataA::to_string() const {
