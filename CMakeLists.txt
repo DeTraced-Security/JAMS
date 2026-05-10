@@ -48,6 +48,12 @@ set(SOURCES
     src/tls/tls_context.cpp
     src/tls/tls_conn.cpp
     src/storage/maildir.cpp
+    src/dns/dns_message.cpp
+    src/dns/dns_resolver.cpp
+    src/auth/spf_checker.cpp
+    src/auth/sasl.cpp
+    src/auth/dmarc_checker.cpp
+    src/auth/dkim_verifier.cpp
 )
 
 add_executable(mailserver ${SOURCES})

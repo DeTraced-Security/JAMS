@@ -30,7 +30,7 @@ IoUringLoop::IoUringLoop(uint16_t port, unsigned queue_depth) : port_(port) {
     std::cout << "[io_uring] features: "
         << ((params.features & IORING_FEAT_FAST_POLL) ? "FAST_POLL " : "")
         << ((params.features & IORING_FEAT_NODROP)    ? "NODROP "    : "")
-        << "\n";
+        << std::endl;
 
     // Initialise TLS:
     const std::string cert = "/etc/letsencrypt/live/your.mail.server/fullchain.pem";
@@ -42,6 +42,13 @@ IoUringLoop::IoUringLoop(uint16_t port, unsigned queue_depth) : port_(port) {
     } catch (const std::exception& ex) {
         std::cerr << "[TLS] ERROR: Could not load key/cert: " << ex.what() << std::endl;
         std::abort();
+    }
+
+    // Initialise DNS Resolver
+    try {
+        dns_resolver_ = std::make_unique<DNS::DNSResolver>("1.1.1.1", &ring_);
+    } catch (const std::exception& ex) {
+        std::cerr << "[DNS] WARNING: resolver failed to initialise: " << ex.what() << std::endl;
     }
 
     setup_listen_socket();
