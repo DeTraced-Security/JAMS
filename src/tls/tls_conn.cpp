@@ -51,7 +51,7 @@ std::vector<uint8_t> TlsConn::feed_encryption(std::span<const uint8_t> cipher_in
 
         int err = SSL_get_error(ssl_, n);
 
-        if (err == SSL_ERROR_WANT_READ) { 
+        if (err == SSL_ERROR_WANT_READ) {
             break; // need more cipher text
         } else if (err == SSL_ERROR_ZERO_RETURN) {
             break; // clean exit/shutdown
@@ -61,16 +61,18 @@ std::vector<uint8_t> TlsConn::feed_encryption(std::span<const uint8_t> cipher_in
             pending_cipher.insert(pending_cipher.end(), out.begin(), out.end());
             
             break;
-        } else {
+        } else  if (err == SSL_ERROR_WANT_X509_LOOKUP) {
             continue;
-        }
+        } else {	
+            // fatal error
+            char buf[256] = {};
+            ERR_error_string_n(ERR_get_error(), buf, sizeof(buf));
 
-        // fatal error
-        char buf[256] = {};
-        ERR_error_string_n(ERR_get_error(), buf, sizeof(buf));
-        
-        std::cerr << "[TLS] SSL_read error: " << buf << std::endl;
-        break;
+            // fatal error
+            std::cerr << "[TLS] SSL_read error: " << buf << std::endl;
+            char buf[256] = {};
+            break;
+        }
     }
 
     return pending_cipher;
