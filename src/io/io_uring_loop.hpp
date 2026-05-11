@@ -12,6 +12,7 @@
 
 #include "tls/tls_context.hpp"
 #include "tls/tls_conn.hpp"
+#include "dns/dns_resolver.hpp"
 
 enum class op_type : uint8_t {
     Accept = 0,
@@ -58,6 +59,10 @@ class IoUringLoop {
 
         void upgrade_tls(uint64_t conn_id);
 
+        DNS::DNSResolver& dns_resolver() {
+            return *dns_resolver_;
+        }
+
     private:
         void setup_listen_socket();
         void arm_accept();
@@ -77,6 +82,7 @@ class IoUringLoop {
         bool ring_initialized_{false};
 
         std::unique_ptr<TlsContext> tls_ctx_;
+        std::unique_ptr<DNS::DNSResolver> dns_resolver_;
 
         sockaddr_in client_addr_{};
         socklen_t client_addr_len_{sizeof(client_addr_)};

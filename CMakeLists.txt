@@ -29,10 +29,13 @@ find_path(LIBURING_INCLUDE_DIR liburing.h
     HINTS /usr/include /usr/local/include)
 
 find_library(LIBURING_LIBRARY uring
-    HINTS /usr/lib /usr/local/lib /usr/lib64)
+    HINTS /usr/lib /usr/local/lib /usr/lib64
+          /usr/lib/x86_64-linux-gnu)
 
 if(NOT LIBURING_INCLUDE_DIR OR NOT LIBURING_LIBRARY)
-    message(FATAL_ERROR "liburing not found. Run: sudo dnf install liburing-devel")
+    message(FATAL_ERROR "liburing not found. Install with:\n"
+        "  Fedora:  sudo dnf install liburing-devel\n"
+        "  Ubuntu:  sudo apt-get install liburing-dev")
 endif()
 
 message(STATUS "liburing: ${LIBURING_LIBRARY}")
@@ -45,6 +48,12 @@ set(SOURCES
     src/tls/tls_context.cpp
     src/tls/tls_conn.cpp
     src/storage/maildir.cpp
+    src/dns/dns_message.cpp
+    src/dns/dns_resolver.cpp
+    src/auth/spf_checker.cpp
+    src/auth/sasl.cpp
+    src/auth/dmarc_checker.cpp
+    src/auth/dkim_verifier.cpp
 )
 
 add_executable(mailserver ${SOURCES})

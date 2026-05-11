@@ -40,12 +40,18 @@ bool MailDir::deliver(
     auto now_tp = std::chrono::system_clock::now();
     auto now_t = std::chrono::system_clock::to_time_t(now_tp);
     char date_buf[64] = {};
-    
+    std::tm tm_buf{};
+
+    if (localtime_r(&now_t, &tm_buf) == nullptr) {
+        std::cerr << "[MailDir] localtime_r failed: " << strerror(errno) << std::endl;
+        return false;
+    }    
+
     // RFC-2822 date format:
     std::strftime(
         date_buf, sizeof(date_buf), 
         "%a, %d %b %Y %H:%M:%S %z",
-        std::localtime(&now_t)
+        &tm_buf
     );
 
     std::string message = "Received: from unknown (HELO unknown)\r\n"
@@ -104,7 +110,13 @@ std::string MailDir::unique_filename(size_t body_size) const {
     pid_t pid = ::getpid();
 
     char hostname[64] = "localhost";
-    ::gethostname(hostname, sizeof(hostname));
+
+    if (::gethostname(hostname, sizeof(hostname)) != 0) {
+        std::cerr << "[maildir] gethostname failed: " << std::strerror(errno)
+            << "; using fallback hostname 'localhost'" << std::endl;
+    } else {
+        hostname[sizeof(hostname) - 1] = '\0';
+    }
 
     // Replace dots with underscores
     for (char* p = hostname; *p; ++p) {

@@ -7,17 +7,17 @@ The mail server will be client-less, allowing users to choose their own local ma
 JAMS, in it's current form, is an experimental project with the following plans:
 
 ### Current  Mail Server Plans:
-- Email Tx/Rx + Client Access: IMAP4, SMTP, 
-- Zero Access storage, 
-- Email filtering, 
-- DKIM/SPF/DMARC, 
-- PGP/GPG signing, 
-- Email Aliasing: configurable aliases:
+- Email Tx/Rx + Client Access: IMAP4, SMTP 🟠, 
+- Zero Access storage 🔴, 
+- Email filtering 🔴, 
+- DKIM/SPF/DMARC 🔴, 
+- PGP/GPG signing 🔴, 
+- Email Aliasing: configurable aliases 🔴:
 - - Self-Terminating Addresses, 
 - - Only receive from emails from domains you want
 - - Automatic Email dropping (Timer based, preferable if you want to receive a confirmation link but no spam!)
-- TLS: STARTLS, LetsEncrypt, etc.,
-- And the normal you can expect from an email server
+- TLS: STARTLS, LetsEncrypt, etc., 🟠
+- And the normal you can expect from an email server 🟠
 
 The above list will be marked with the following symbols to indicate status:
 - 🟢 -> Complete
