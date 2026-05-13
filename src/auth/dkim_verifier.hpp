@@ -104,6 +104,104 @@ namespace DKIM {
             void verify(const std::string& raw_headers, const std::string& raw_body, VerifyCallback callback);
 
         private:
+            /// @brief Extract DKIM headers from the raw header data
+            /// @param raw_headers 
+            /// @return 
+            static std::vector<std::string> extract_dkim_headers(const std::string& raw_headers);
 
+            /// @brief Parse applicable DKIM headers from the extracted values
+            /// @param header_value 
+            /// @return 
+            static std::optional<Signature> parse_signature(const std::string& header_value);
+
+            /// @brief Parse applicable key records into a record cache
+            /// @param txt 
+            /// @return 
+            static std::optional<KeyRecord> parse_key_record(const std::string& txt);
+
+            /// @brief Parse tag=value lists shared by header and signature parsing
+            /// @param input 
+            /// @return 
+            static std::unordered_map<std::string, std::string> parse_tag_list(const std::string& input);
+
+            /// @brief Canonicalise the message body as per RFC 6376 3.4
+            /// @param body 
+            /// @param method 
+            /// @return 
+            static std::string canonicalize_body(const std::string& body, const std::string& method);
+
+            /// @brief Canonicalise a single header as per RFC 6376 3.4
+            /// @param name 
+            /// @param value 
+            /// @param method 
+            /// @return 
+            static std::string canonicalize_header(
+                const std::string& name, const std::string& value, 
+                const std::string& method
+            );
+
+            /// @brief Build canonicalised header block for signing
+            /// @param all_headers 
+            /// @param sig 
+            /// @param dkim_header_value 
+            /// @return 
+            static std::string build_signed_header_block(
+                const std::vector<std::string>& all_headers, const Signature& sig,
+                const std::string& dkim_header_value
+            );
+
+            /// @brief Compute SHA-256 hash of the data and return raw bytes
+            /// @param data 
+            /// @return 
+            static std::vector<uint8_t> sha256(const std::string& data);
+
+            /// @brief Encode into Base64
+            /// @param data 
+            /// @return 
+            static std::string base64_encode(const std::vector<uint8_t>& data);
+
+            /// @brief Decode from Base64
+            /// @param base64 
+            /// @return 
+            static std::vector<uint8_t> base64_decode(const std::string& base64);
+
+            static bool verify_ed25519(
+                const std::vector<uint8_t>& signed_data, const std::vector<uint8_t>& signature,
+                const std::vector<uint8_t>& public_key
+            );
+
+            static bool verify_rsa_sha256(
+                const std::vector<uint8_t>& message_hash, const std::vector<uint8_t>& signature,
+                const std::vector<uint8_t>& pub_key_der
+            );
+
+            /// @brief Verifiable Session States
+            struct VerifyState {
+                Signature sig;
+                std::string raw_headers;
+                std::string raw_body;
+                std::string dkim_header_value; // original header for signing
+                VerifyCallback callback;
+            };
+
+            /// @brief Verify the integrity of the DKIM public key
+            /// @param state 
+            void fetch_key_and_verify(std::shared_ptr<VerifyState> state);
+
+            /// @brief Key Verification, per session state
+            /// @param state 
+            /// @param key 
+            void do_verify(std::shared_ptr<VerifyState> state, const KeyRecord& key);
+
+            /// @brief Finalise the chain by handing over to the state callback
+            /// @param state 
+            /// @param result 
+            /// @param explanation 
+            void finish(std::shared_ptr<VerifyState> state, Result result, std::string explanation = {});
+
+            DNS::DNSResolver& resolver_;
+
+            /// @brief DKIM Key cache
+            std::unordered_map<std::string, KeyRecord> key_cache_;
     };
 };
