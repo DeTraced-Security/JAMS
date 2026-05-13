@@ -14,6 +14,7 @@
 #include "tls/tls_conn.hpp"
 #include "dns/dns_resolver.hpp"
 
+/// @brief Operation Types for io_uring
 enum class op_type : uint8_t {
     Accept = 0,
     Read = 1,
@@ -21,18 +22,29 @@ enum class op_type : uint8_t {
     Close = 3
 };
 
+/// @brief Encodes data to ensure integrity and avoid dangling references
+/// @param op 
+/// @param conn_id 
+/// @return 
 inline uint64_t encode_userdata(op_type op, uint64_t conn_id) {
     return (static_cast<uint64_t>(op) << 60) | (conn_id & 0x0FFF'FFFF'FFFF'FFFF);
 }
 
+/// @brief Decode io_uring encoded data
+/// @param userdata 
+/// @return 
 inline op_type decode_op(uint64_t userdata) {
     return static_cast<op_type>(userdata >> 60);
 }
 
+/// @brief Decode connection IDs from encoded data
+/// @param userdata 
+/// @return 
 inline uint64_t decode_conn_id(uint64_t userdata) {
     return userdata & 0x0FFF'FFFF'FFFF'FFFF;
 }
 
+// Forward Declarations
 class SMTPSession;
 class TlsContext;
 class TlsConn;
@@ -45,34 +57,69 @@ class TlsConn;
  */
 class IoUringLoop {
     public:
+        /// @brief Initialise io_uring with a queue depth of 256
+        /// @param port 
+        /// @param queue_depth 
         explicit IoUringLoop(uint16_t port, unsigned queue_depth = 256);
         ~IoUringLoop();
 
         IoUringLoop(const IoUringLoop&) = delete;
         IoUringLoop& operator=(const IoUringLoop&) = delete;
 
+        /// @brief 
         void run();
 
+        /// @brief Submit writes to the io_uring queue
+        /// @param conn_id 
+        /// @param data 
         void submit_write(uint64_t conn_id, std::vector<uint8_t> data);
 
+        /// @brief Submit close requests to io_uring for clean shutdowns
+        /// and prevent leaking data after close
+        /// @param conn_id 
         void submit_close(uint64_t conn_id);
 
+        /// @brief Upgrade a plaintext connection to TLS
+        /// @param conn_id 
         void upgrade_tls(uint64_t conn_id);
 
+        /// @brief Return a pointer to the DNS resolver
+        /// @return 
         DNS::DNSResolver& dns_resolver() {
             return *dns_resolver_;
         }
 
     private:
+        /// @brief Sets up the server listening socket 
         void setup_listen_socket();
+
+        /// @brief Prepares the server to accept new requests
         void arm_accept();
 
+        /// @brief Handling accept events 
+        /// @param fd 
+        /// @param res 
         void on_accept(int fd, int res);
+
+        /// @brief Handling session read events
+        /// @param conn_id 
+        /// @param res 
         void on_read(uint64_t conn_id, int res);
+
+        /// @brief Handling file-write events
+        /// @param conn_id 
+        /// @param res 
         void on_write(uint64_t conn_id, int res);
+
+        /// @brief Cleanly close server connections
+        /// @param conn_id 
         void on_close(uint64_t conn_id);
 
+        /// @brief Get the applicable Session Que Entry (SQE)
+        /// @return 
         io_uring_sqe* get_sqe();
+
+        /// @brief Submit the process to io_uring
         void submit();
 
         uint16_t port_;
