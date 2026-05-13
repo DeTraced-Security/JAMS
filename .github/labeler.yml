@@ -1,0 +1,50 @@
+configuration:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'config/**'
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'docs/**'
+          - '*.md'
+
+authentication:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/auth/**'
+
+dns:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/dns/**'
+
+io:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/io/**'
+
+smtp:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/smtp/**'
+
+storage:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/storage/**'
+
+tls:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/tls/**'
+
+source:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/**'
+
+github:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/**'
