@@ -83,7 +83,7 @@ namespace DMARC {
         public:
             explicit DMARCChecker(DNS::DNSResolver& resolver);
 
-            /// @brief 
+            /// @brief Check and validate the DMARC records to maintain integrity with the RFC
             /// @param from_domain 
             /// @param from_from_domain 
             /// @param spf_result 
@@ -97,12 +97,12 @@ namespace DMARC {
         
         private:
 
-            /// @brief 
+            /// @brief Parse the records and set what we need to continue
             /// @param txt 
             /// @return 
             static std::optional<DMARCRecord> parse_record(const std::string& txt);
             
-            /// @brief 
+            /// @brief Parse the policies and set what we need to continue
             /// @param value 
             /// @return 
             static Policy parse_policy(const std::string& value);
@@ -127,13 +127,29 @@ namespace DMARC {
                 CheckCallback callback;
             };
 
+            /// @brief Fetch the DMARC record and evaluate with the resolver TXT handler
+            /// @param dmarc_domain 
+            /// @param from_domain 
+            /// @param is_from_subdomain_fallback 
+            /// @param state 
             void fetch_and_evaluate(
                 const std::string& dmarc_domain, const std::string& from_domain,
                 bool is_from_subdomain_fallback, std::shared_ptr<EvalState> state
             );
 
+            /// @brief Evaluates the records to see if they match the DMARC policy
+            /// @param record 
+            /// @param is_subdomain 
+            /// @param state 
             void evaluate(const DMARCRecord& record, bool is_subdomain, std::shared_ptr<EvalState> state);
 
+            /// @brief Finalise the chain by handing over to the state callback
+            /// @param state 
+            /// @param result 
+            /// @param policy 
+            /// @param spf_aligned 
+            /// @param dkim_aligned 
+            /// @param explanation 
             void finish(
                 std::shared_ptr<EvalState> state, Result result, Policy policy,
                 bool spf_aligned, bool dkim_aligned, std::string explanation = ""
