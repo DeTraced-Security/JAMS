@@ -390,7 +390,7 @@ namespace DKIM {
 
                 // Remove trailing SP
                 if (canonical.empty()) {
-                    pending += '\r\n'; 
+                    pending += "\r\n"; 
                 } else {
                     result += pending;
                     pending.clear();
