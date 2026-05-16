@@ -631,7 +631,38 @@ namespace DKIM {
         const std::vector<uint8_t>& signature,
         const std::vector<uint8_t>& pub_key_der
     ) {
-        // TODO
+        const uint8_t* ptr = pub_key_der.data();
+        EVP_PKEY* pub_key = d2i_PUBKEY(nullptr, &ptr, static_cast<long>(pub_key_der.size()));
+
+        if (!pub_key) {
+            std::cerr << "[DKIM] failed to parse RSA public key" << std::endl;
+            return false;
+        }
+
+        EVP_PKEY_CTX* ctx = EVP_PKEY_CTX_new(pub_key, nullptr);
+        EVP_PKEY_free(pub_key);
+
+        // Context failed to initialise
+        if(!ctx) {
+            return false;
+        }
+
+        bool ok = false;
+        if (EVP_PKEY_verify_init(ctx) > 0 &&
+            EVP_PKEY_CTX_set_rsa_padding(ctx, RSA_PKCS1_PADDING) > 0 &&
+            EVP_PKEY_CTX_set_signature_md(ctx, EVP_sha256()) > 0
+        ) {
+            int result = EVP_PKEY_verify(
+                ctx, signature.data(), static_cast<size_t>(signature.size()),
+                message_hash.data(), static_cast<size_t>(message_hash.size())
+            );
+
+            ok = (result == 1);
+        }
+
+        EVP_PKEY_CTX_free(ctx);
+
+        return ok;
     }
 
     bool DKIMVerifier::verify_ed25519(
@@ -639,22 +670,222 @@ namespace DKIM {
         const std::vector<uint8_t>& signature,
         const std::vector<uint8_t>& public_key
     ) {
-        // TODO
+        EVP_PKEY* pub_key = EVP_PKEY_new_raw_public_key(
+            EVP_PKEY_ED25519, nullptr, public_key.data(), public_key.size()
+        );
+
+        if (!pub_key) {
+            std::cerr << "[DKIM] failed to parse ED25519 public key" << std::endl;
+            return false;
+        }
+
+        EVP_MD_CTX* ctx = EVP_MD_CTX_new();
+        bool ok = false;
+
+        if (ctx && EVP_DigestVerifyInit(
+            ctx, nullptr, nullptr, nullptr, pub_key
+        ) > 0) {
+            int result = EVP_DigestVerify(
+                ctx, signature.data(), signature.size(),
+                signed_data.data(), signed_data.size()
+            );
+            ok = (result == 1);
+        }
+
+        EVP_MD_CTX_free(ctx);
+        EVP_PKEY_free(pub_key);
+        
+        return ok;
     }
 
     void DKIMVerifier::fetch_key_and_verify(std::shared_ptr<VerifyState> state) {
-        // TODO
+        // Check Key Cache first
+        std::string cached_key = state->sig.selector + "._domainkey." + state->sig.domain;
+        auto itr = key_cache_.find(cached_key);
+
+        if (itr != key_cache_.end()) {
+            std::cout << "[DKIM] Key Cache hit: " << cached_key << std::endl;
+            do_verify(state, itr->second);
+            return;
+        }
+
+        std::cout << "[DKIM] fetching key: " << cached_key << std::endl;
+
+        resolver_.resolve_txt(cached_key, 
+            [this, state, cached_key](DNS::ResolveResult rr) mutable {
+                if (
+                    rr.status == DNS::ResolveStatus::Timeout ||
+                    rr.status == DNS::ResolveStatus::ServFail
+                ) {
+                    finish(state, Result::TempError, "DNS lookup failed for: " + cached_key);
+                    return;
+                }
+
+                if (
+                    rr.status == DNS::ResolveStatus::NXDomain ||
+                    rr.records.empty()
+                ) {
+                    finish(state, Result::PermError, "No key record at: " + cached_key);
+                    return;
+                }
+
+                // Find the DKIM record
+                std::string key_txt{};
+
+                for (const auto& record : rr.records) {
+                    if (auto* txt = std::get_if<DNS::RDataTXT>(&record.rdata)) {
+                        if (txt->text.find("p=") != std::string::npos) {
+                            key_txt = txt->text;
+                            break;
+                        }
+                    }
+                }
+
+                // if "p=" is empty, or somehow failed
+                if (key_txt.empty()) {
+                    finish(state, Result::PermError, "No DKIM key record (p= tag missing or incomplete) at: " + cached_key);
+                    return;
+                }
+
+                auto key = parse_key_record(key_txt);
+                if (!key) {
+                    finish(state, Result::PermError, "Malformed DKIM key record at: " + cached_key);
+                    return;
+                }
+
+                // Cache for session reuse
+                key_cache_[cached_key] = *key;
+                do_verify(state, *key);
+        });
     }
 
     void DKIMVerifier::do_verify(const std::shared_ptr<VerifyState> state, const KeyRecord& key) {
-        // TODO
+        const Signature& signature = state->sig;
 
+        // Check the signature algorithm type
+        bool alg_ok = (
+            signature.algorithm == "rsa-sha256" && key.key_type == "rsa"
+        ) || (signature.algorithm == "ed25519-sha256" && key.key_type == "ed25519");
+
+        if (!alg_ok) {
+            finish(state, Result::PermError, 
+                "Algorithm mismatch: sig=" + signature.algorithm + " key=" + key.key_type
+            );
+            return;
+        }
+
+        // Check the expiry tag
+        if (signature.expiry > 0) {
+            auto now = static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::seconds>(
+                    std::chrono::system_clock::now().time_since_epoch()
+                ).count()
+            );
+
+            if (now > signature.expiry) {
+                finish(state, Result::Fail, "Signature has expired");
+                return;
+            }
+        }
+
+        // Canonicalise and hash the body
+        std::string body = state->raw_body;
+
+        // if "l=" tag is present, warn but proceed
+        if (signature.body_length >= 0) {
+            std::cerr << "[DKIM] WARNING: l= tag present, partially signed body" << std::endl;
+
+            if (static_cast<size_t>(signature.body_length) < body.size()) {
+                body = body.substr(0, static_cast<size_t>(signature.body_length));
+            }
+        }
+
+        std::string canon_body = canonicalize_body(body, signature.body_canon);
+        auto body_hash = sha256(canon_body);
+        std::string body_hash_b64 = base64_encode(body_hash);
+
+        // Verify body hash
+        if (body_hash_b64 != signature.body_hash) {
+            finish(state, Result::Fail, 
+                "Body hash mismatch: computed= " + body_hash_b64 + " \nExpected= " + signature.body_hash
+            );
+            return;
+        }
+
+        std::cout << "[DKIM] Body hash OK" << std::endl;
+
+        // Build signed header block
+        std::vector<std::string> header_lines;
+        std::istringstream ss(state->raw_headers);
+        std::string line;
+        std::string current;
+
+        while (std::getline(ss, line)) {
+            if (!line.empty() && line.back() == '\r') {
+                line.pop_back();
+            }
+
+            if (line.empty()) {
+                break;
+            }
+
+            if (!line.empty() && (line[0] == ' ' || line[0] == '\t')) {
+                current += '\n' + line; // folded continuation
+            } else {
+                current += line;
+            }
+        }
+
+        if (!current.empty()) {
+            header_lines.push_back(current);
+        }
+
+        std::string signed_block = build_signed_header_block(
+            header_lines, signature, state->dkim_header_value
+        );
+
+        // Verify the signature
+        auto signature_bytes = base64_decode(signature.signature);
+        auto key_bytes = base64_decode(key.pk_b64);
+
+        if (signature_bytes.empty() || key_bytes.empty()) {
+            finish(state, Result::PermError, "Failed to decode signature or key");
+            return;
+        }
+
+        bool ok = false;
+
+        if (signature.algorithm == "rsa-sha256") {
+            auto header_hash = sha256(signed_block);
+            ok = verify_rsa_sha256(header_hash, signature_bytes, key_bytes);
+        } else if (signature.algorithm == "ed25519-sha256") {
+            // ED signs the data without a pre-hashed value
+            ok = verify_ed25519(
+                std::vector<uint8_t>(signed_block.begin(), signed_block.end()),
+                signature_bytes, key_bytes
+            );
+        }
+
+        if (ok) {
+            std::cout << "[DKIM] PASS d=" << signature.domain << " s=" << signature.selector << std::endl;
+            finish(state, Result::Pass);
+        } else {
+            finish(state, Result::Fail, "Signature verification failed");
+        }
     }
 
     void DKIMVerifier::finish(
         std::shared_ptr<VerifyState> state, Result result,
         std::string explanation
     ) {
-        // TODO
+        std::cout << "[DKIM] result= " << result_to_string(result)
+            << " d=" << state->sig.domain << " s=" << state->sig.selector
+            << (explanation.empty() ? "" : " reason " + explanation)
+            << std::endl;
+
+        state->callback({
+            result, state->sig.domain, state->sig.selector,
+            std::move(explanation)
+        });
     }
 };
