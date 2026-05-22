@@ -105,10 +105,9 @@ namespace Auth {
 
         sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
 
-        bool ok = false;
         bool user_found = false;
         std::string stored_hash, salt;
-        int iterations;
+        int iterations = 100000;
 
         if (sqlite3_step(stmt) == SQLITE_ROW) {
             user_found = user_exists(username);

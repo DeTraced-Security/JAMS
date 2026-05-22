@@ -24,6 +24,7 @@ add_link_options(
 )
 
 find_package(OpenSSL REQUIRED)
+find_package(SQLite3 REQUIRED)
 
 find_path(LIBURING_INCLUDE_DIR liburing.h
     HINTS /usr/include /usr/local/include)
@@ -63,10 +64,13 @@ target_include_directories(mailserver PRIVATE
     ${CMAKE_SOURCE_DIR}/src
     ${LIBURING_INCLUDE_DIR}
     ${OPENSSL_INCLUDE_DIR}
+    ${SQLite3_INCLUDE_DIRS}
 )
 
 target_link_libraries(mailserver PRIVATE
     ${LIBURING_LIBRARY}
     OpenSSL::SSL
     OpenSSL::Crypto
+    ${SQLite3_LIBRARIES}
+    crypt
 )
