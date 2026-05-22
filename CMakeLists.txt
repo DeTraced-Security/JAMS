@@ -54,10 +54,10 @@ set(SOURCES
     src/auth/sasl.cpp
     src/auth/dmarc_checker.cpp
     src/auth/dkim_verifier.cpp
+    src/auth/cred_store.cpp
 )
 
-add_executable(mailserver ${SOURCES}
-    src/auth/cred_store.hpp)
+add_executable(mailserver ${SOURCES})
 
 target_include_directories(mailserver PRIVATE
     ${CMAKE_SOURCE_DIR}/src
