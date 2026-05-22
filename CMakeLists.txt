@@ -56,7 +56,8 @@ set(SOURCES
     src/auth/dkim_verifier.cpp
 )
 
-add_executable(mailserver ${SOURCES})
+add_executable(mailserver ${SOURCES}
+    src/auth/cred_store.hpp)
 
 target_include_directories(mailserver PRIVATE
     ${CMAKE_SOURCE_DIR}/src
