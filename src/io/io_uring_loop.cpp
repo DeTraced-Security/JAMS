@@ -54,6 +54,8 @@ IoUringLoop::IoUringLoop(uint16_t port, unsigned queue_depth) : port_(port) {
     setup_listen_socket();
 }
 
+static_assert(sizeof(SMTPSession) > 0); 
+
 IoUringLoop::~IoUringLoop() {
     if (ring_initialized_) {
         io_uring_queue_exit(&ring_);

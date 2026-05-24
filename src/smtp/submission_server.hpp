@@ -1,0 +1,143 @@
+#pragma once
+
+#include "auth/sasl.hpp"
+#include "auth/cred_store.hpp"
+#include "smtp_session.hpp"
+#include <cstdint>
+#include <memory>
+#include <span>
+#include <string>
+
+class IoUringLoop;
+
+// SMTP submission session for port 587 (RFC 6409).
+//
+// Differences from SmtpSession (port 25):
+//   1. AUTH is required before MAIL FROM
+//   2. EHLO advertises AUTH PLAIN LOGIN (only after STARTTLS)
+//   3. Outbound messages are DKIM-signed before queuing
+//   4. No inbound SPF/DKIM/DMARC checking (we trust authenticated users)
+//   5. VRFY and EXPN are disabled
+//
+// State machine:
+//   Connected → Greeted → [TLS] → Authenticated → Mail → Rcpt → Data → Done
+//
+// TLS requirement:
+//   AUTH is only advertised after STARTTLS. If a client attempts AUTH
+//   before TLS is established, we respond with 538 (encryption required).
+class SubmissionServer {
+    public:
+        SubmissionServer(
+            uint64_t conn_id, const std::string& remote_ip,
+            IoUringLoop& loop, Auth::CredentialStore& store
+        );
+
+        /// @brief Called by io_uring when bytes arrive
+        /// @param bytes 
+        void on_data(std::span<const uint8_t> bytes);
+
+        /// @brief Called by io_uring when the TLS handshake completes
+        void on_tls_established();
+
+        /// @brief Calls out to SASL to check if the connection is authenticated
+        /// @return 
+        bool is_authenticated() const {
+            return sasl_.authenticated();
+        }
+    
+    private:
+     /// @brief Processes commands received from on-wire data
+        /// @param line 
+        void process_line(std::string_view line);
+
+        /// @brief Sends back HELO request to the sender
+        /// @param arg 
+        void cmd_ehlo(std::string_view arg);
+
+        /// @brief Sends HELO request to the receiver
+        /// @param arg 
+        void cmd_helo(std::string_view arg);
+
+        /// @brief Handles on-wire data relating to FROM sender
+        /// @param arg 
+        void cmd_mail(std::string_view arg);
+
+        /// @brief Handles on-wire data relating to Recipient(s)
+        /// @param arg 
+        void cmd_rcpt(std::string_view arg);
+
+        /// @brief Force Authentication over TLS then authenticate
+        /// @param arg 
+        void cmd_auth(std::string_view arg);
+
+        /// @brief Handles overall mail data structure
+        void cmd_data();
+
+        /// @brief Sends reset signal to the mail server (greeting)
+        void cmd_rset();
+
+        /// @brief If no commands are received reply back with "OK" status
+        void cmd_noop();
+
+        /// @brief Closes connection to the mail server on QUIT commands
+        void cmd_quit();
+
+        /// @brief Starts the upgrade process for non-secure connections
+        void cmd_starttls();
+
+        void accumulate_data(std::string_view line);
+
+        /// @brief Hands over Submission replies to io_uring
+        /// @param text 
+        void reply(int code, std::string_view text);
+        
+        /// @brief Hands multiline Submission replies over to io_uring with specific codes
+        /// @param code 
+        /// @param lines 
+        void reply_multiline(int code, const std::vector<std::string>& lines);
+
+        
+        /// @brief Delivers mail to the recipient
+        /// @return 
+        bool deliver();
+
+        /// @brief Trims unwanted data from the given string
+        /// @param sv 
+        /// @return 
+        static std::string_view trim(std::string_view sv);
+
+        /// @brief Extracts domain name from user@domain variants
+        /// @param arg 
+        /// @return 
+        static std::string_view extract_address(std::string_view arg);
+
+        uint64_t conn_id_;
+        std::string remote_ip_;
+        IoUringLoop& loop_;
+        Auth::SASLSession sasl_;
+
+        /// @brief Submission States
+        enum class State {
+            Connected,
+            Greeted,
+            Authenticated,
+            Mail,
+            Rcpt,
+            Data,
+            Done
+        };
+
+        State state_{State::Connected};
+        bool tls_active_{false};
+        std::string line_buf_;
+        std::string data_tail_;
+
+        struct Envelope {
+            std::string mail_from;
+            std::vector<std::string> rcpt_to;
+            std::string body;
+        };
+
+        Envelope env_;
+        std::string client_helo_;
+};

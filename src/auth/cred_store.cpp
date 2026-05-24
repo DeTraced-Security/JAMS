@@ -24,7 +24,7 @@ namespace Auth {
         exec("PRAGMA foreign_keys=ON");
         ensure_schema();
 
-        std::cout << "[auth] credential store opened: " << db_path << std::endl;
+        std::cout << "[Auth] credential store opened: " << db_path << std::endl;
     }
 
     CredentialStore::~CredentialStore() {
