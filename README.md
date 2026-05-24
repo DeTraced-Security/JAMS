@@ -10,8 +10,9 @@ JAMS, in it's current form, is an experimental project with the following plans:
 - Email Tx/Rx + Client Access: IMAP4, SMTP 🟠, 
 - Zero Access storage 🔴, 
 - Email filtering 🔴, 
-- DKIM/SPF/DMARC 🔴, 
+- DKIM/SPF/DMARC 🟢, 
 - PGP/GPG signing 🔴, 
+- Multi-User Accounts 🟠,
 - Email Aliasing: configurable aliases 🔴:
 - - Self-Terminating Addresses, 
 - - Only receive from emails from domains you want

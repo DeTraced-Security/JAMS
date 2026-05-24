@@ -24,6 +24,7 @@ add_link_options(
 )
 
 find_package(OpenSSL REQUIRED)
+find_package(SQLite3 REQUIRED)
 
 find_path(LIBURING_INCLUDE_DIR liburing.h
     HINTS /usr/include /usr/local/include)
@@ -54,6 +55,7 @@ set(SOURCES
     src/auth/sasl.cpp
     src/auth/dmarc_checker.cpp
     src/auth/dkim_verifier.cpp
+    src/auth/cred_store.cpp
 )
 
 add_executable(mailserver ${SOURCES})
@@ -62,10 +64,13 @@ target_include_directories(mailserver PRIVATE
     ${CMAKE_SOURCE_DIR}/src
     ${LIBURING_INCLUDE_DIR}
     ${OPENSSL_INCLUDE_DIR}
+    ${SQLite3_INCLUDE_DIRS}
 )
 
 target_link_libraries(mailserver PRIVATE
     ${LIBURING_LIBRARY}
     OpenSSL::SSL
     OpenSSL::Crypto
+    ${SQLite3_LIBRARIES}
+    crypt
 )
