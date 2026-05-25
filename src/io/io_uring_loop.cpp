@@ -1,5 +1,6 @@
 #include "io_uring_loop.hpp"
 #include "smtp/smtp_session.hpp"
+#include "globals.hpp"
 
 #include <liburing.h>
 #include <sys/socket.h>
@@ -123,12 +124,23 @@ void IoUringLoop::run() {
 
     io_uring_cqe* cqe = nullptr;
 
-    for (;;) {
-        // Block until at least one completion is ready
-        int ret = io_uring_wait_cqe(&ring_, &cqe);
+    while (!g_shutdown)
+    {
+        __kernel_timespec ts{ .tv_sec = 0, .tv_nsec = 500'000'000 };
+        int ret = io_uring_wait_cqe_timeout(&ring_, &cqe, &ts);
+
+        if (ret == -ETIME) {
+            // Timeout, we loop back and check the shutdown
+            continue;
+        }
+
+        if (ret == -EINTR) {
+            // We got interrupted, loop back
+            continue;
+        }
+
         if (ret < 0) {
             std::cerr << "[io_uring] wait_cqe error: " << strerror(-ret) << std::endl;
-            continue;
         }
 
         unsigned head = 0;
@@ -156,6 +168,8 @@ void IoUringLoop::run() {
 
         io_uring_cq_advance(&ring_, head);
     }
+
+    std::cout << "[io_uring] loop exiting on port: " << port_ << std::endl;
 }
 
 void IoUringLoop::on_accept(int /*fd*/, int res) {

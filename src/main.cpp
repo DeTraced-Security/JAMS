@@ -12,7 +12,7 @@ static constexpr const char* JAMS_VERSION = "0.0.1-alpha";
 static constexpr const char* JAMS_HOSTNAME = "mail.detraced.org";
 
 // Signal handling
-static volatile sig_atomic_t g_shutdown = 0;
+volatile sig_atomic_t g_shutdown = 0;
 static void handle_signal(int sig) {
     g_shutdown = 1;
 
