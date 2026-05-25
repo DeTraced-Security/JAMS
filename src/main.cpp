@@ -49,6 +49,7 @@ static void banner() {
 
 struct Config {
     uint16_t smtp_port{25};
+    uint16_t submission_port{587};
     std::string db_path{"/var/lib/jams/users.db"};
 };
 
@@ -125,7 +126,7 @@ int main(int argc, char* argv[]) {
             << "        sudo mkdir -p /var/lib/jams\n"
             << "        sudo chown $USER /var/lib/jams" << std::endl;
         
-        return -1;
+        return 1;
     }
 
     // SMTP inbound loop
@@ -133,14 +134,33 @@ int main(int argc, char* argv[]) {
     std::cout << "[JAMS] Hostname: " << JAMS_HOSTNAME << std::endl;
     std::cout << "[JAMS] Ready\n" << std::endl;
 
-    try {
-        IoUringLoop smtp_loop(cfg.smtp_port);
-        smtp_loop.run(); // Blocks until signal or fatal error
-    } catch (const std::exception& ex) {
-        std::cerr << "[JAMS - FATAL] SMTP loop: " << ex.what() << std::endl;
-        return -1;
-    }
+    std::atomic<bool> server_failed{false};
+
+    std::thread smtp_thread([&]() {
+        try {
+            IoUringLoop smtp_loop(cfg.smtp_port);
+            smtp_loop.run();
+        } catch (const std::exception& ex) {
+            std::cerr << "[JAMS - FATAL] SMTP loop: " << ex.what() << std::endl; 
+            server_failed = true;
+            raise(SIGTERM);  
+        }
+    });
+
+    std::thread submission_thread([&]() {
+        try {
+            IoUringLoop submission_loop(cfg.submission_port);
+            submission_loop.run();
+        } catch(const std::exception& ex) {
+            std::cerr << "[JAMS - FATAL] Submission loop: " << ex.what() << std::endl;
+            server_failed = true;
+            raise(SIGTERM);
+        }
+    });
+
+    smtp_thread.join();
+    submission_thread.join();
 
     std::cout << "[JAMS] Shutdown complete" << std::endl;
-    return 0;
+    return server_failed ? EXIT_FAILURE : 0;
 }

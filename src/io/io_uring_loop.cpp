@@ -33,8 +33,8 @@ IoUringLoop::IoUringLoop(uint16_t port, unsigned queue_depth) : port_(port) {
         << std::endl;
 
     // Initialise TLS:
-    const std::string cert = "/etc/letsencrypt/live/your.mail.server/fullchain.pem";
-    const std::string key = "/etc/letsencrypt/live/your.mail.server/privkey.pem";
+    const std::string cert = "/etc/jams/tls/cert.pem";
+    const std::string key = "/etc/jams/tls/key.pem";
     
     try {
         tls_ctx_ = std::make_unique<TlsContext>(cert, key);
@@ -94,7 +94,15 @@ void IoUringLoop::setup_listen_socket() {
         );
     }
 
-    std::cout << "[SMTP] Listening on port " << port_ << std::endl;
+    if (port_ == 25) {
+        std::cout << "[SMTP] Listening on port: " << port_ << std::endl;
+    } else if (port_ == 587) {
+        std::cout << "[Submission] Listening on port: " << port_ << std::endl;
+    } else {
+        std::cout << "[CUSTOM] Listening on port: " << port_ << std::endl;
+    }
+
+    
 }
 
 void IoUringLoop::arm_accept() {

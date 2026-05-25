@@ -85,8 +85,6 @@ class SubmissionServer {
         /// @brief Starts the upgrade process for non-secure connections
         void cmd_starttls();
 
-        void accumulate_data(std::string_view line);
-
         /// @brief Hands over Submission replies to io_uring
         /// @param text 
         void reply(int code, std::string_view text);
