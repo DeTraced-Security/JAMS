@@ -56,6 +56,7 @@ set(SOURCES
     src/auth/dmarc_checker.cpp
     src/auth/dkim_verifier.cpp
     src/auth/cred_store.cpp
+    src/smtp/submission_server.cpp
 )
 
 add_executable(mailserver ${SOURCES})

@@ -32,6 +32,8 @@ namespace Auth {
     //   bool ok = store.verify("alice", "wrong");   // false
     class CredentialStore {
         public:
+            sqlite3* db_{nullptr};
+            
             explicit CredentialStore(const std::string& db_path);
             ~CredentialStore();
 
@@ -119,7 +121,5 @@ namespace Auth {
 
             /// @brief Ensure the SQL schema is valid
             void ensure_schema();
-
-            sqlite3* db_{nullptr};
     };
 };

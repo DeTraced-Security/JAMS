@@ -1,5 +1,6 @@
 #include "io_uring_loop.hpp"
 #include "smtp/smtp_session.hpp"
+#include "globals.hpp"
 
 #include <liburing.h>
 #include <sys/socket.h>
@@ -33,8 +34,8 @@ IoUringLoop::IoUringLoop(uint16_t port, unsigned queue_depth) : port_(port) {
         << std::endl;
 
     // Initialise TLS:
-    const std::string cert = "/etc/letsencrypt/live/your.mail.server/fullchain.pem";
-    const std::string key = "/etc/letsencrypt/live/your.mail.server/privkey.pem";
+    const std::string cert = "/etc/jams/tls/cert.pem";
+    const std::string key = "/etc/jams/tls/key.pem";
     
     try {
         tls_ctx_ = std::make_unique<TlsContext>(cert, key);
@@ -53,6 +54,8 @@ IoUringLoop::IoUringLoop(uint16_t port, unsigned queue_depth) : port_(port) {
 
     setup_listen_socket();
 }
+
+static_assert(sizeof(SMTPSession) > 0); 
 
 IoUringLoop::~IoUringLoop() {
     if (ring_initialized_) {
@@ -92,7 +95,15 @@ void IoUringLoop::setup_listen_socket() {
         );
     }
 
-    std::cout << "[SMTP] Listening on port " << port_ << std::endl;
+    if (port_ == 25) {
+        std::cout << "[SMTP] Listening on port: " << port_ << std::endl;
+    } else if (port_ == 587) {
+        std::cout << "[Submission] Listening on port: " << port_ << std::endl;
+    } else {
+        std::cout << "[CUSTOM] Listening on port: " << port_ << std::endl;
+    }
+
+    
 }
 
 void IoUringLoop::arm_accept() {
@@ -113,12 +124,23 @@ void IoUringLoop::run() {
 
     io_uring_cqe* cqe = nullptr;
 
-    for (;;) {
-        // Block until at least one completion is ready
-        int ret = io_uring_wait_cqe(&ring_, &cqe);
+    while (!g_shutdown)
+    {
+        __kernel_timespec ts{ .tv_sec = 0, .tv_nsec = 500'000'000 };
+        int ret = io_uring_wait_cqe_timeout(&ring_, &cqe, &ts);
+
+        if (ret == -ETIME) {
+            // Timeout, we loop back and check the shutdown
+            continue;
+        }
+
+        if (ret == -EINTR) {
+            // We got interrupted, loop back
+            continue;
+        }
+
         if (ret < 0) {
             std::cerr << "[io_uring] wait_cqe error: " << strerror(-ret) << std::endl;
-            continue;
         }
 
         unsigned head = 0;
@@ -146,6 +168,8 @@ void IoUringLoop::run() {
 
         io_uring_cq_advance(&ring_, head);
     }
+
+    std::cout << "[io_uring] loop exiting on port: " << port_ << std::endl;
 }
 
 void IoUringLoop::on_accept(int /*fd*/, int res) {

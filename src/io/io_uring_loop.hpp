@@ -142,7 +142,7 @@ class IoUringLoop {
         };
 
         uint64_t next_conn_id{1};
-        std::unordered_map<uint64_t, ConnBuffer> buffers_{};
-        std::unordered_map<uint64_t, std::unique_ptr<SMTPSession>> sessions_{};
-        std::unordered_map<uint64_t, std::unique_ptr<TlsConn>> tls_conns_{};
+        std::unordered_map<uint64_t, ConnBuffer> buffers_;
+        std::unordered_map<uint64_t, std::unique_ptr<SMTPSession>> sessions_;
+        std::unordered_map<uint64_t, std::unique_ptr<TlsConn>> tls_conns_;
 };
