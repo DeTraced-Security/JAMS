@@ -1,5 +1,6 @@
 #include "io/io_uring_loop.hpp"
 #include "auth/cred_store.hpp"
+#include "imap/imap_session.hpp"
 #include <csignal>
 #include <cstring>
 #include <stdexcept>
@@ -29,6 +30,7 @@ static void help(const char* prog) {
         << "\n"
         << "options:\n"
         << "  --smtp-port  <port>   SMTP inbound port        (default: 25)\n"
+        << "  --imap-port  <port>   IMAP4 port               (default: 993)\n" 
         << "  --db         <path>   path to user database    (default: /var/lib/jams/users.db)\n"
         << "  --help                show this message\n"
         << "\n"
@@ -50,6 +52,7 @@ static void banner() {
 struct Config {
     uint16_t smtp_port{25};
     uint16_t submission_port{587};
+    uint16_t imap_port{993};
     std::string db_path{"/var/lib/jams/users.db"};
 };
 
@@ -66,22 +69,42 @@ static bool parse_args(int argc, char* argv[], Config& cfg) {
                 std::cerr << "[error] " << arg << " requires an argument\n";
                 return {};
             }
+
             return argv[++i];
         };
  
         if (arg == "--smtp-port") {
             auto val = next();
-            if (val.empty()) return false;
+            if (val.empty()) {
+                return false;
+            }
+
             int p = std::atoi(val.c_str());
             if (p <= 0 || p > 65535) {
                 std::cerr << "[error] invalid port: " << val << "\n";
                 return false;
             }
+
             cfg.smtp_port = static_cast<uint16_t>(p);
- 
+        } else if (arg == "--imap-port") {
+            auto val = next();
+            if (val.empty()) {
+                return false;
+            }
+
+            int p = std::atoi(val.c_str());
+            if (p <= 0 || p >= 65535) {
+                std::cerr << "[error] invalid port: " << val << "\n";
+                return false;
+            }
+
+            cfg.imap_port = static_cast<uint16_t>(p);
         } else if (arg == "--db") {
             auto val = next();
-            if (val.empty()) return false;
+            if (val.empty()) {
+                return false;
+            }
+
             cfg.db_path = val;
  
         } else {
@@ -158,8 +181,20 @@ int main(int argc, char* argv[]) {
         }
     });
 
+    std::thread imap_thread([&]() {
+        try {
+            IoUringLoop imap_loop(cfg.imap_port);
+            imap_loop.run();
+        } catch(std::exception& ex) {
+            std::cerr << "[JAMS - FATAL] IMAP loop: " << ex.what() << std::endl;
+            server_failed = true;
+            raise(SIGTERM);
+        }
+    });
+
     smtp_thread.join();
     submission_thread.join();
+    imap_thread.join();
 
     std::cout << "[JAMS] Shutdown complete" << std::endl;
     return server_failed ? EXIT_FAILURE : 0;
