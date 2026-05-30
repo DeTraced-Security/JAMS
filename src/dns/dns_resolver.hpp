@@ -116,6 +116,10 @@ namespace DNS {
             io_uring_sqe* get_sqe();
             void submit();
 
+            inline bool dns_is_dns_completion(uint64_t ud) {
+                return (ud >> 60) == 0xD;
+            }
+
             static constexpr uint64_t QUERY_TIMEOUT_NS = 5'000'000'000ULL; // 5 Seconds
             static constexpr uint8_t MAX_RETRIES = 1;
             static constexpr size_t RECV_BUF_SIZE = 4096;
