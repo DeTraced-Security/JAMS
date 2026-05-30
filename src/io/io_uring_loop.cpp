@@ -145,6 +145,15 @@ void IoUringLoop::run() {
 
         unsigned head = 0;
         io_uring_for_each_cqe(&ring_, head, cqe) {
+            // Route DNS completions before trying to decode as SMTP ops
+            if (DNS::dns_is_dns_completion(ud)) {
+                if (dns_resolver_) {
+                    dns_resolver_->on_cqe(ud, res);
+                }
+                continue;
+
+            }
+
             uint64_t ud = cqe->user_data;
             op_type op = decode_op(ud);
             uint64_t conn_id = decode_conn_id(ud);
