@@ -18,6 +18,11 @@ class IoUringLoop;
 namespace DNS {
     using ResolveCallback = std::function<void(ResolveResult)>;
 
+    
+    inline bool dns_is_completion(uint64_t ud) {
+        return (ud >> 60) == 0xD;
+    }
+
     // OpType encoding for DNS
     //
     // We reuse the same user_data packing scheme as IoUringLoop but with a
@@ -41,10 +46,6 @@ namespace DNS {
         return (uint64_t{0xD} << 60) 
             | (static_cast<uint64_t>(op) << 48)
             | txid;
-    }
-
-    inline bool dns_is_completion(uint64_t ud) {
-        return (ud >> 60) == 0xD;
     }
 
     inline DNSOp dns_decode_op(uint64_t ud) {
