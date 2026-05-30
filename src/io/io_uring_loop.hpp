@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include <span>
 #include <vector>
+#include <deque>
 
 #include "tls/tls_context.hpp"
 #include "tls/tls_conn.hpp"
@@ -122,6 +123,8 @@ class IoUringLoop {
         /// @brief Submit the process to io_uring
         void submit();
 
+        void flush_write(uint64_t conn_id);
+
         uint16_t port_;
         int listen_fd_{-1};
 
@@ -137,7 +140,8 @@ class IoUringLoop {
         static constexpr size_t READ_BUF_SIZE = 8192;
         struct ConnBuffer {
             std::vector<uint8_t> read_buf;
-            std::vector<uint8_t> write_buf;
+            std::deque<std::vector<uint8_t>> write_queue;
+            bool write_pending{false};
             int fd{-1};
         };
 

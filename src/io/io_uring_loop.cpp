@@ -209,7 +209,11 @@ void IoUringLoop::on_accept(int /*fd*/, int res) {
     io_uring_sqe* sqe = get_sqe();
     io_uring_prep_recv(sqe, client_fd, buf.read_buf.data(), buf.read_buf.size(), 0);
     sqe->user_data = encode_userdata(op_type::Read, cid);
+    std::cout << "[accept] conn=" << cid << " fd=" << client_fd 
+          << " from=" << ip_buf << std::endl;
     submit();
+
+    std::cout << "[accept] submit has fired" << std::endl;
 }
 
 void IoUringLoop::on_read(uint64_t conn_id, int res) {
@@ -260,12 +264,45 @@ void IoUringLoop::on_read(uint64_t conn_id, int res) {
 }
 
 void IoUringLoop::on_write(uint64_t conn_id, int res) {
+    auto bit = buffers_.find(conn_id);
+    if (bit == buffers_.end()) {
+        return;
+    }
+
     if (res < 0) {
         std::cerr << "[write] conn=" << conn_id << " error: " << strerror(-res) << std::endl;
         submit_close(conn_id);
+        return;
     }
 
-    // Write completed and now owned by sqe-prep
+    if (!bit->second.write_queue.empty()) {
+        bit->second.write_queue.pop_front();
+    }
+
+    bit->second.write_pending = false;
+
+    // Send the next queued write
+    if (!bit->second.write_queue.empty()) {
+        flush_write(conn_id);
+    }
+}
+
+void IoUringLoop::flush_write(uint64_t conn_id) {
+    auto bit = buffers_.find(conn_id);
+    if (bit == buffers_.end() || bit->second.write_queue.empty()) {
+        return;
+    }
+
+    bit->second.write_pending = true;
+
+    io_uring_sqe* sqe = get_sqe();
+    io_uring_prep_send(
+        sqe, bit->second.fd, bit->second.write_queue.front().data(),
+        bit->second.write_queue.front().size(), 0
+    );
+
+    sqe->user_data = encode_userdata(op_type::Write, conn_id);
+    submit();
 }
 
 void IoUringLoop::on_close(uint64_t conn_id) {
@@ -284,6 +321,7 @@ void IoUringLoop::submit_write(uint64_t conn_id, std::vector<uint8_t> data) {
     auto bit = buffers_.find(conn_id);
     
     if (bit == buffers_.end()) {
+        std::cout << "[submit-write] Buffer is empty!" << std::endl;
         return;
     }
 
@@ -301,14 +339,12 @@ void IoUringLoop::submit_write(uint64_t conn_id, std::vector<uint8_t> data) {
 
     // To keep the buffer alive until a completion fires,
     // We store it on the ConnBuffer ans pass a raw pointer to io_uring
-    // TODO: create a write queue
-    bit->second.write_buf = std::move(data);
+    bit->second.write_queue.push_back(std::move(data));
 
-    io_uring_sqe* sqe = get_sqe();
-    io_uring_prep_send(sqe, bit->second.fd, bit->second.write_buf.data(), bit->second.write_buf.size(), 0);
-    sqe->user_data = encode_userdata(op_type::Write, conn_id);
-
-    submit();
+    // Only arm on a new send, if there's no inflight
+    if (!bit->second.write_pending) {
+        flush_write(conn_id);
+    }
 }
 
 void IoUringLoop::submit_close(uint64_t conn_id) {
