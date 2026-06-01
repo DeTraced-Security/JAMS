@@ -390,7 +390,6 @@ void IoUringLoop::submit_close(uint64_t conn_id) {
     }
 
     bit->second.closing = true;
-    bit->second.write_queue.clear();
 
     if (bit->second.inflight > 0) {
         return; // wait for the queue to drain
