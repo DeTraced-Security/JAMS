@@ -90,7 +90,7 @@ void IoUringLoop::setup_listen_socket() {
         );
     }
 
-    if (::listen(listen_fd_, SOMAXCONN) < 0) {
+    if (::listen(listen_fd_, 5) < 0) {
         throw std::runtime_error(
             std::string("listen(): ") + strerror(errno)
         );
@@ -184,6 +184,11 @@ void IoUringLoop::run() {
 }
 
 void IoUringLoop::on_accept(int /*fd*/, int res) {
+    if (buffers_.size() >= 10) {
+        ::close(res);
+        return;
+    }
+
     // Always re-arm accept first so we don't miss new connections
     arm_accept();
 
