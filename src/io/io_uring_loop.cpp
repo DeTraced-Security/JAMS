@@ -223,17 +223,17 @@ void IoUringLoop::on_read(uint64_t conn_id, int res) {
         return;
     }
 
-if (res <= 0) {
-    if (res == -ECANCELED || res == -ENOENT) {
+    if (res <= 0) {
+        if (res == -ECANCELED || res == -ENOENT) {
+            return;
+        }
+        // EOF - tear down
+        if (res < 0) {
+            std::cerr << "[read] conn=" << conn_id << " error: " << strerror(-res) << std::endl;
+        }
+        submit_close(conn_id);
         return;
     }
-    // EOF - tear down
-    if (res < 0) {
-        std::cerr << "[read] conn=" << conn_id << " error: " << strerror(-res) << std::endl;
-    }
-    submit_close(conn_id);
-    return;
-}
 
     std::span<uint8_t> data(bit->second.read_buf.data(), static_cast<size_t>(res));
 
@@ -363,7 +363,7 @@ void IoUringLoop::submit_close(uint64_t conn_id) {
     bit->second.closing = true;
 
     io_uring_sqe* sqe = get_sqe();
-    io_uring_prep_close(sqe, bit->second.fd);
+    io_uring_prep_cancel64(sqe, encode_userdata(op_type::Read, conn_id), 0);
     sqe->user_data = encode_userdata(op_type::Close, conn_id);
 
     submit();
