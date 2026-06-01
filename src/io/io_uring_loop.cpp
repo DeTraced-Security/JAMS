@@ -187,8 +187,15 @@ void IoUringLoop::on_accept(int /*fd*/, int res) {
     // Always re-arm accept first so we don't miss new connections
     arm_accept();
 
-    if (res < 0) {
-        std::cerr << "[accept] Error: " << strerror(-res) << std::endl;
+    if (res <= 0) {
+        if (res < 0) {
+            std::cerr << "[accept] Error: " << strerror(-res) << std::endl;
+        }
+        return;
+    }
+
+    if (res == 0) {
+        // Ignore spurious wakeups
         return;
     }
 
