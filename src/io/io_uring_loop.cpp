@@ -187,7 +187,7 @@ void IoUringLoop::on_accept(int /*fd*/, int res) {
     // Always re-arm accept first so we don't miss new connections
     arm_accept();
 
-    if (res <= 0) {
+    if (res < 0) {
         std::cerr << "[accept] Error: " << strerror(-res) << std::endl;
         return;
     }
@@ -268,6 +268,7 @@ void IoUringLoop::on_read(uint64_t conn_id, int res) {
 }
 
 void IoUringLoop::on_write(uint64_t conn_id, int res) {
+    std::cerr << "[on_write] conn=" << conn_id << " res=" << res << std::endl;
     auto bit = buffers_.find(conn_id);
     if (bit == buffers_.end()) {
         return;
@@ -292,6 +293,7 @@ void IoUringLoop::on_write(uint64_t conn_id, int res) {
 }
 
 void IoUringLoop::flush_write(uint64_t conn_id) {
+    std::cerr << "[flush_write] conn=" << conn_id << " queue_size=" << buffers_[conn_id].write_queue.size() << std::endl;
     auto bit = buffers_.find(conn_id);
     if (bit == buffers_.end() || bit->second.write_queue.empty()) {
         return;
