@@ -319,6 +319,8 @@ void IoUringLoop::on_write(uint64_t conn_id, int res) {
     if (!bit->second.write_queue.empty() && !bit->second.closing) {
         flush_write(conn_id);
     } else if (bit->second.closing) {
+        std::cerr << "[on_write deferred close] conn=" << conn_id 
+          << " inflight=" << bit->second.inflight << "\n";
         submit_close(conn_id);
     }
 }
@@ -388,6 +390,11 @@ void IoUringLoop::submit_close(uint64_t conn_id) {
     if (bit == buffers_.end() || bit->second.closing) {
         return;
     }
+
+    std::cerr << "[submit_close] conn=" << conn_id 
+            << " inflight=" << bit->second.inflight
+            << " write_queue=" << bit->second.write_queue.size()
+            << " write_pending=" << bit->second.write_pending << "\n";
 
     bit->second.closing = true;
 
