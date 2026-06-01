@@ -184,13 +184,13 @@ void IoUringLoop::run() {
 }
 
 void IoUringLoop::on_accept(int /*fd*/, int res) {
+    // Always re-arm accept first so we don't miss new connections
+    arm_accept();
+
     if (buffers_.size() >= 10) {
         ::close(res);
         return;
     }
-
-    // Always re-arm accept first so we don't miss new connections
-    arm_accept();
 
     if (res <= 0) {
         if (res < 0) {
