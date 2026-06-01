@@ -142,6 +142,7 @@ class IoUringLoop {
             std::vector<uint8_t> read_buf;
             std::deque<std::vector<uint8_t>> write_queue;
             bool write_pending{false};
+            bool closing{false};
             int fd{-1};
         };
 

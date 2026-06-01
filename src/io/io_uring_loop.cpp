@@ -113,7 +113,7 @@ void IoUringLoop::arm_accept() {
     io_uring_prep_accept(
         sqe, listen_fd_,
         reinterpret_cast<sockaddr*>(&client_addr_),
-        &client_addr_len_, 0
+        &client_addr_len_, SOCK_CLOEXEC
     );
 
     sqe->user_data = encode_userdata(op_type::Accept, 0);
@@ -187,7 +187,7 @@ void IoUringLoop::on_accept(int /*fd*/, int res) {
     // Always re-arm accept first so we don't miss new connections
     arm_accept();
 
-    if (res < 0) {
+    if (res <= 0) {
         std::cerr << "[accept] Error: " << strerror(-res) << std::endl;
         return;
     }
@@ -213,8 +213,6 @@ void IoUringLoop::on_accept(int /*fd*/, int res) {
     std::cout << "[accept] conn=" << cid << " fd=" << client_fd 
           << " from=" << ip_buf << std::endl;
     submit();
-
-    std::cout << "[accept] submit has fired" << std::endl;
 }
 
 void IoUringLoop::on_read(uint64_t conn_id, int res) {
@@ -225,14 +223,17 @@ void IoUringLoop::on_read(uint64_t conn_id, int res) {
         return;
     }
 
-    if (res <= 0) {
-        // EOF - tear down
-        if (res < 0) {
-            std::cerr << "[read] conn=" << conn_id << " error: " << strerror(-res) << std::endl;
-        }
-        submit_close(conn_id);
+if (res <= 0) {
+    if (res == -ECANCELED || res == -ENOENT) {
         return;
     }
+    // EOF - tear down
+    if (res < 0) {
+        std::cerr << "[read] conn=" << conn_id << " error: " << strerror(-res) << std::endl;
+    }
+    submit_close(conn_id);
+    return;
+}
 
     std::span<uint8_t> data(bit->second.read_buf.data(), static_cast<size_t>(res));
 
@@ -257,11 +258,13 @@ void IoUringLoop::on_read(uint64_t conn_id, int res) {
         sit->second->on_data(data);
     }
 
-    // Re-arm read
-    io_uring_sqe* sqe = get_sqe();
-    io_uring_prep_recv(sqe, bit->second.fd, bit->second.read_buf.data(), bit->second.read_buf.size(), 0);
-    sqe->user_data = encode_userdata(op_type::Read, conn_id);
-    submit();
+    if (!bit->second.closing) {
+        // Re-arm read
+        io_uring_sqe* sqe = get_sqe();
+        io_uring_prep_recv(sqe, bit->second.fd, bit->second.read_buf.data(), bit->second.read_buf.size(), 0);
+        sqe->user_data = encode_userdata(op_type::Read, conn_id);
+        submit();
+    }
 }
 
 void IoUringLoop::on_write(uint64_t conn_id, int res) {
@@ -309,7 +312,6 @@ void IoUringLoop::flush_write(uint64_t conn_id) {
 void IoUringLoop::on_close(uint64_t conn_id) {
     auto bit = buffers_.find(conn_id);
     if (bit != buffers_.end()) {
-        ::close(bit->second.fd);
         buffers_.erase(bit);
     }
 
@@ -354,6 +356,12 @@ void IoUringLoop::submit_close(uint64_t conn_id) {
         return;
     }
 
+    if (bit->second.closing) {
+        return;
+    }
+
+    bit->second.closing = true;
+
     io_uring_sqe* sqe = get_sqe();
     io_uring_prep_close(sqe, bit->second.fd);
     sqe->user_data = encode_userdata(op_type::Close, conn_id);
@@ -377,8 +385,11 @@ void IoUringLoop::upgrade_tls(uint64_t conn_id) {
 
     auto tls = std::make_unique<TlsConn>(
         tls_ctx_->new_server_ssl(),
-        [session](std::span<const uint8_t> plain) {
-            session->on_data(plain);
+        [this, conn_id](std::span<const uint8_t> plain) {
+            auto itr = sessions_.find(conn_id);
+            if (itr != sessions_.end()) {
+                itr->second->on_data(plain);
+            }
         }
     );
 
