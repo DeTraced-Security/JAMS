@@ -171,9 +171,9 @@ void IoUringLoop::run() {
                 case op_type::Write:
                     on_write(conn_id, res);
                     break;
-                case op_type::Close:
-                    on_close(conn_id);
-                    break;
+                // case op_type::Close:
+                //     on_close(conn_id);
+                //     break;
             }
         }
 
@@ -191,11 +191,6 @@ void IoUringLoop::on_accept(int /*fd*/, int res) {
         if (res < 0) {
             std::cerr << "[accept] Error: " << strerror(-res) << std::endl;
         }
-        return;
-    }
-
-    if (res == 0) {
-        // Ignore spurious wakeups
         return;
     }
 
@@ -217,8 +212,9 @@ void IoUringLoop::on_accept(int /*fd*/, int res) {
     io_uring_sqe* sqe = get_sqe();
     io_uring_prep_recv(sqe, client_fd, buf.read_buf.data(), buf.read_buf.size(), 0);
     sqe->user_data = encode_userdata(op_type::Read, cid);
-    std::cout << "[accept] conn=" << cid << " fd=" << client_fd 
-          << " from=" << ip_buf << std::endl;
+    std::cout << "[accept] conn=" << cid << " fd=" << client_fd << " from=" << ip_buf << std::endl;
+    
+    buf.inflight++;
     submit();
 }
 
@@ -229,6 +225,8 @@ void IoUringLoop::on_read(uint64_t conn_id, int res) {
     if (bit == buffers_.end() || sit == sessions_.end()) {
         return;
     }
+
+    bit->second.inflight--;
 
     if (res <= 0) {
         if (res == -ECANCELED || res == -ENOENT) {
@@ -265,12 +263,21 @@ void IoUringLoop::on_read(uint64_t conn_id, int res) {
         sit->second->on_data(data);
     }
 
+    /// relookup in case of old data
+    bit = buffers_.find(conn_id);
+    if (bit == buffers_.end()) {
+        return;
+    }
+
     if (!bit->second.closing) {
         // Re-arm read
         io_uring_sqe* sqe = get_sqe();
         io_uring_prep_recv(sqe, bit->second.fd, bit->second.read_buf.data(), bit->second.read_buf.size(), 0);
         sqe->user_data = encode_userdata(op_type::Read, conn_id);
+        bit->second.inflight++;
         submit();
+    } else {
+        submit_close(conn_id);
     }
 }
 
@@ -280,6 +287,8 @@ void IoUringLoop::on_write(uint64_t conn_id, int res) {
     if (bit == buffers_.end()) {
         return;
     }
+
+    bit->second.inflight--;
 
     if (res < 0) {
         std::cerr << "[write] conn=" << conn_id << " error: " << strerror(-res) << std::endl;
@@ -294,8 +303,10 @@ void IoUringLoop::on_write(uint64_t conn_id, int res) {
     bit->second.write_pending = false;
 
     // Send the next queued write
-    if (!bit->second.write_queue.empty()) {
+    if (!bit->second.write_queue.empty() && !bit->second.closing) {
         flush_write(conn_id);
+    } else if (bit->second.closing) {
+        submit_close(conn_id);
     }
 }
 
@@ -315,6 +326,7 @@ void IoUringLoop::flush_write(uint64_t conn_id) {
     );
 
     sqe->user_data = encode_userdata(op_type::Write, conn_id);
+    bit->second.inflight++;
     submit();
 }
 
@@ -326,7 +338,6 @@ void IoUringLoop::on_close(uint64_t conn_id) {
 
     sessions_.erase(conn_id);
     tls_conns_.erase(conn_id);
-    std::cout << "[close] conn=" << conn_id << std::endl;
 }
 
 void IoUringLoop::submit_write(uint64_t conn_id, std::vector<uint8_t> data) {
@@ -361,21 +372,27 @@ void IoUringLoop::submit_write(uint64_t conn_id, std::vector<uint8_t> data) {
 
 void IoUringLoop::submit_close(uint64_t conn_id) {
     auto bit = buffers_.find(conn_id);
-    if (bit == buffers_.end()) {
-        return;
-    }
-
-    if (bit->second.closing) {
+    if (bit == buffers_.end() || bit->second.closing) {
         return;
     }
 
     bit->second.closing = true;
+    bit->second.write_queue.clear();
 
-    io_uring_sqe* sqe = get_sqe();
-    io_uring_prep_cancel64(sqe, encode_userdata(op_type::Read, conn_id), 0);
-    sqe->user_data = encode_userdata(op_type::Close, conn_id);
+    if (bit->second.inflight > 0) {
+        return; // wait for the queue to drain
+    }
 
-    submit();
+    ::close(bit->second.fd);
+    buffers_.erase(bit);
+    sessions_.erase(conn_id);
+    tls_conns_.erase(conn_id);
+
+    std::cerr << "[close] conn=" << conn_id << " closed" << std::endl;
+    // io_uring_sqe* sqe = get_sqe();
+    // io_uring_prep_cancel64(sqe, encode_userdata(op_type::Read, conn_id), 0);
+    // sqe->user_data = encode_userdata(op_type::Close, conn_id);
+    // submit();
 }
 
 void IoUringLoop::upgrade_tls(uint64_t conn_id) {
@@ -389,9 +406,7 @@ void IoUringLoop::upgrade_tls(uint64_t conn_id) {
     if (sit == sessions_.end()) {
         return;
     }
-
-    SMTPSession* session = sit->second.get();
-
+    
     auto tls = std::make_unique<TlsConn>(
         tls_ctx_->new_server_ssl(),
         [this, conn_id](std::span<const uint8_t> plain) {
