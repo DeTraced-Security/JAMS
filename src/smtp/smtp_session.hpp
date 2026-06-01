@@ -38,6 +38,11 @@ class SMTPSession {
         /// @param bytes 
         void on_data(std::span<const uint8_t> bytes);
 
+        bool pending_close_{false};
+        bool wants_close() const {
+            return pending_close_;
+        }
+        
     private:
         /// @brief Processes commands received from on-wire data
         /// @param line 

@@ -270,7 +270,15 @@ void IoUringLoop::on_read(uint64_t conn_id, int res) {
 
     /// relookup in case of old data
     bit = buffers_.find(conn_id);
+    auto sit2 = sessions_.find(conn_id);
+
     if (bit == buffers_.end()) {
+        return;
+    }
+
+    // Check if session requested close
+    if (sit2 != sessions_.end() && sit2->second->wants_close()) {
+        submit_close(conn_id);
         return;
     }
 
