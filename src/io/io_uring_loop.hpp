@@ -92,6 +92,11 @@ class IoUringLoop {
             return *dns_resolver_;
         }
 
+        bool is_tls_active(uint64_t conn_id)  const {
+            auto itr = tls_conns_.find(conn_id);
+            return itr != tls_conns_.end() && itr->second->handshake_done();
+        }
+
     private:
         /// @brief Sets up the server listening socket 
         void setup_listen_socket();
