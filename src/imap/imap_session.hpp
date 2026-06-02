@@ -77,6 +77,8 @@ class IMAPSession : public Session {
         void cmd_starttls(const std::string& tag);
 
         void cmd_login(const std::string& tag, const std::string& args);
+
+        void cmd_auth(const std::string& tag, const std::string& args);
         
         void cmd_select(
             const std::string& tag, const std::string& mailbox,

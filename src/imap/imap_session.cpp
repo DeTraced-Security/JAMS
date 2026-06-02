@@ -1,4 +1,5 @@
 #include "imap_session.hpp"
+#include "auth/cred_store.hpp"
 #include <dirent.h>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -548,6 +549,82 @@ void IMAPSession::cmd_close(const std::string& tag) {
     state_ = State::Authenticated;
 
     ok(tag, "CLOSE completed");
+}
+
+void IMAPSession::cmd_auth(const std::string& tag, const std::string& args) {
+    std::istringstream ss(args);
+    std::string mechanism, initial_response;
+    ss >> mechanism >> initial_response;
+
+
+    // PLAIN support
+    for (char& c : mechanism) {
+        c = toupper(c);
+    }
+
+    if (mechanism != "PLAIN") {
+        no(tag, "Unsupported authentication mechanism");
+        return;
+    }
+
+    if (initial_response.empty()) {
+        send("+ "); // empty line challenge
+        bad(tag, "Multi-step AUTHENTICATE not supported, use SASL-IR");
+        return;
+    }
+
+    auto base64_decode = [](const std::string& b64) -> std::vector<uint8_t> {
+        std::vector<uint8_t> result(b64.size());
+        BIO* b64_bio = BIO_new(BIO_f_base64());
+        BIO* mem = BIO_new_mem_buf(b64.data(), static_cast<int>(b64.size()));
+        
+        BIO_set_flags(b64_bio, BIO_FLAGS_BASE64_NO_NL);
+        BIO_push(b64_bio, mem);
+
+        int n = BIO_read(b64_bio, result.data(), static_cast<int>(result.size()));
+
+        BIO_free_all(b64_bio);
+
+        if (n < 0) {
+            return {};
+        }
+
+        result.resize(static_cast<size_t>(n));
+        return result;
+    };
+
+    // Decode the b64
+    auto decoded = base64_decode(initial_response);
+    auto itr1 = std::find(decoded.begin(), decoded.end(), '\0');
+
+    if (itr1 == decoded.end()) {
+        bad(tag, "Malformed PLAIN response");
+        return;
+    }
+
+    auto itr2 = std::find(itr1 + 1, decoded.end(), '\0');
+    if (itr2 == decoded.end()) {
+        bad(tag, "Malformed PLAIN response");
+        return;
+    }
+
+    std::string user(itr1 + 1, itr2);
+    std::string pass(itr2 + 1, decoded.end());
+
+    auto at = user.find('@');
+    if (at != std::string::npos) {
+        user = user.substr(0, at);
+    }
+
+    if (!cred_store_.verify(user, pass)) {
+        no(tag, "[AUTHENTICATIONFAILED] Invalid credentials");
+        return;
+    }
+
+    username_ = user;
+    state_ = State::Authenticated;
+    ok(tag, "[CAPABILITY IMAP4rev1] Authentication successful");
+
 }
 
 void IMAPSession::load_mailbox(const std::string& mailbox) {
