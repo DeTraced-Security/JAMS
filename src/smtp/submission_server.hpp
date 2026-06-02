@@ -45,6 +45,10 @@ class SubmissionServer : public Session {
         bool is_authenticated() const {
             return sasl_.authenticated();
         }
+
+        bool wants_close() const override {
+            return pending_close_;
+        }
     
     private:
      /// @brief Processes commands received from on-wire data
@@ -130,6 +134,8 @@ class SubmissionServer : public Session {
         bool tls_active_{false};
         std::string line_buf_;
         std::string data_tail_;
+
+        bool pending_close_{false};
 
         struct Envelope {
             std::string mail_from;

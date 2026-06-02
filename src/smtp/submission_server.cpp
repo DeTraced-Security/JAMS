@@ -291,6 +291,7 @@ void SubmissionServer::cmd_noop() {
 void SubmissionServer::cmd_quit() {
     reply(221, "mail.detraced.org closing connection");
     state_ = State::Done;
+    pending_close_ = true;
     loop_.submit_close(conn_id_);
 }
 

@@ -123,8 +123,6 @@ class IoUringLoop {
 
         void flush_write(uint64_t conn_id);
 
-        SessionFactory session_factory_;
-
         uint16_t port_;
         int listen_fd_{-1};
 
@@ -146,6 +144,8 @@ class IoUringLoop {
             int inflight{0};
             int fd{-1};
         };
+
+        SessionFactory session_factory_;
 
         uint64_t next_conn_id{1};
         std::unordered_map<uint64_t, ConnBuffer> buffers_;

@@ -157,7 +157,7 @@ int main(int argc, char* argv[]) {
     std::thread submission_thread([&]() {
         try {
             IoUringLoop submission_loop(cfg.submission_port, [&cred_store](uint64_t id, const std::string& ip, IoUringLoop& loop) {
-                return std::make_unique<SubmissionServer>(id, ip, loop, &cred_store);
+                return std::make_unique<SubmissionServer>(id, ip, loop, cred_store);
             });
             submission_loop.run();
         } catch(const std::exception& ex) {
@@ -170,7 +170,7 @@ int main(int argc, char* argv[]) {
     std::thread imap4_thread([&]() {
         try {
             IoUringLoop imap4_loop(cfg.imap4_port, [&cred_store](uint64_t id, const std::string& ip, IoUringLoop& loop) {
-                return std::make_unique<IMAPSession>(id, ip, loop, &cred_store);
+                return std::make_unique<IMAPSession>(id, ip, loop, cred_store, "/var/mail/jams");
             });
             imap4_loop.run();
         } catch (const std::exception& ex) {
@@ -183,7 +183,7 @@ int main(int argc, char* argv[]) {
     std::thread imap4_secure_thread([&]() {
         try {
             IoUringLoop imap4_secure_loop(cfg.imap4_secure_port, [&cred_store](uint64_t id, const std::string& ip, IoUringLoop& loop) {
-                return std::make_unique<IMAPSession>(id, ip, loop, &cred_store);
+                return std::make_unique<IMAPSession>(id, ip, loop, cred_store, "/var/mail/jams");
             });
             imap4_secure_loop.run();
         } catch (const std::exception& ex) {
