@@ -18,7 +18,7 @@ IMAPSession::IMAPSession(
 ) : conn_id_(conn_id), remote_ip_(remote_ip), loop_(loop), cred_store_(cred_store),
     mail_root_(mail_root) {
         // Send greeting on connect
-        untagged("OK [CAPABILITY IMAPrev4 STARTTLS AUTH=PLAIN IDLE] JAMS IMAP server ready");
+        untagged("OK [CAPABILITY IMAP4rev1STARTTLS AUTH=PLAIN IDLE] JAMS IMAP server ready");
     }
 
 void IMAPSession::on_data(std::span<const uint8_t> bytes) {
@@ -156,7 +156,7 @@ void IMAPSession::process_line(const std::string& line) {
 }
 
 void IMAPSession::cmd_capability(const std::string& tag) {
-    untagged("CAPABILITY IMAPrev4 STARTTLS AUTH=PLAIN LITERAL+ SASL-IR");
+    untagged("CAPABILITY IMAP4rev1STARTTLS AUTH=PLAIN LITERAL+ SASL-IR");
 
     ok(tag, "CAPABILITY completed");
 }
