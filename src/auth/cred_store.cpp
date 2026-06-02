@@ -100,6 +100,7 @@ namespace Auth {
             "WHERE username = ? AND active = 1";
         
         if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+            std::cerr << "[auth] SQL Account Verification perpare failed: " << sqlite3_errmsg(db_) << std::endl;
             return false;
         }
 
