@@ -96,7 +96,7 @@ namespace Auth {
         }
 
         sqlite3_stmt* stmt = nullptr;
-        const char* sql = "SELECT hash, salt, iterations, FROM users "
+        const char* sql = "SELECT hash, salt, iterations FROM users "
             "WHERE username = ? AND active = 1";
         
         if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
