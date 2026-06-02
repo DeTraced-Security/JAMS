@@ -46,6 +46,13 @@ void IMAPSession::process_line(const std::string& line) {
         return;
     }
 
+    if (auth_pending_) {
+        auth_pending_ = false;
+        complete_plain_auth(auth_tag_, line);
+        
+        return;
+    }
+
     std::cout << "[IMAP] " << conn_id_ << " " << line << std::endl;
 
     std::istringstream ss(line);
@@ -552,27 +559,28 @@ void IMAPSession::cmd_close(const std::string& tag) {
 }
 
 void IMAPSession::cmd_auth(const std::string& tag, const std::string& args) {
-    std::istringstream ss(args);
+   std::istringstream ss(args);
     std::string mechanism, initial_response;
     ss >> mechanism >> initial_response;
 
-
-    // PLAIN support
-    for (char& c : mechanism) {
-        c = toupper(c);
-    }
-
+    for (char& c : mechanism) c = toupper(c);
     if (mechanism != "PLAIN") {
         no(tag, "Unsupported authentication mechanism");
         return;
     }
 
     if (initial_response.empty()) {
-        send("+ "); // empty line challenge
-        bad(tag, "Multi-step AUTHENTICATE not supported, use SASL-IR");
+        send("+ "); // challenge — wait for next line
+        auth_pending_ = true;
+        auth_tag_ = tag;
         return;
     }
 
+    complete_plain_auth(tag, initial_response);  // SASL-IR inline
+
+}
+
+void IMAPSession::complete_plain_auth(const std::string& tag, const std::string& b64) {
     auto base64_decode = [](const std::string& b64) -> std::vector<uint8_t> {
         std::vector<uint8_t> result(b64.size());
         BIO* b64_bio = BIO_new(BIO_f_base64());
@@ -592,29 +600,18 @@ void IMAPSession::cmd_auth(const std::string& tag, const std::string& args) {
         result.resize(static_cast<size_t>(n));
         return result;
     };
+    auto decoded = base64_decode(b64);
 
-    // Decode the b64
-    auto decoded = base64_decode(initial_response);
-    auto itr1 = std::find(decoded.begin(), decoded.end(), '\0');
+    auto it1 = std::find(decoded.begin(), decoded.end(), '\0');
+    if (it1 == decoded.end()) { bad(tag, "Malformed PLAIN credentials"); return; }
+    auto it2 = std::find(it1 + 1, decoded.end(), '\0');
+    if (it2 == decoded.end()) { bad(tag, "Malformed PLAIN credentials"); return; }
 
-    if (itr1 == decoded.end()) {
-        bad(tag, "Malformed PLAIN response");
-        return;
-    }
-
-    auto itr2 = std::find(itr1 + 1, decoded.end(), '\0');
-    if (itr2 == decoded.end()) {
-        bad(tag, "Malformed PLAIN response");
-        return;
-    }
-
-    std::string user(itr1 + 1, itr2);
-    std::string pass(itr2 + 1, decoded.end());
+    std::string user(it1 + 1, it2);
+    std::string pass(it2 + 1, decoded.end());
 
     auto at = user.find('@');
-    if (at != std::string::npos) {
-        user = user.substr(0, at);
-    }
+    if (at != std::string::npos) user = user.substr(0, at);
 
     if (!cred_store_.verify(user, pass)) {
         no(tag, "[AUTHENTICATIONFAILED] Invalid credentials");
@@ -622,9 +619,8 @@ void IMAPSession::cmd_auth(const std::string& tag, const std::string& args) {
     }
 
     username_ = user;
-    state_ = State::Authenticated;
+    state_    = State::Authenticated;
     ok(tag, "[CAPABILITY IMAP4rev1] Authentication successful");
-
 }
 
 void IMAPSession::load_mailbox(const std::string& mailbox) {

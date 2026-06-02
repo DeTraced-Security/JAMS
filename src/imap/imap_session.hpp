@@ -79,6 +79,8 @@ class IMAPSession : public Session {
         void cmd_login(const std::string& tag, const std::string& args);
 
         void cmd_auth(const std::string& tag, const std::string& args);
+
+        void complete_plain_auth(const std::string& tag, const std::string& b64);
         
         void cmd_select(
             const std::string& tag, const std::string& mailbox,
@@ -182,6 +184,8 @@ class IMAPSession : public Session {
         std::string username_;
         std::string selected_mailbox_;
         bool read_only_{false};
+        bool auth_pending_{false};
+        std::string auth_tag_;
         
         std::vector<MessageMeta> messages_;
         uint32_t next_uuid_{1}; // The next UUID to assign
