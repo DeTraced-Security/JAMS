@@ -112,10 +112,6 @@ class IoUringLoop {
         /// @param res 
         void on_write(uint64_t conn_id, int res);
 
-        /// @brief Cleanly close server connections
-        /// @param conn_id 
-        void on_close(uint64_t conn_id);
-
         /// @brief Get the applicable Session Que Entry (SQE)
         /// @return 
         io_uring_sqe* get_sqe();

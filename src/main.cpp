@@ -50,6 +50,7 @@ static void banner() {
 struct Config {
     uint16_t smtp_port{25};
     uint16_t submission_port{587};
+    uint16_t imap4_port{993};
     std::string db_path{"/var/lib/jams/users.db"};
 };
 
@@ -153,6 +154,17 @@ int main(int argc, char* argv[]) {
             submission_loop.run();
         } catch(const std::exception& ex) {
             std::cerr << "[JAMS - FATAL] Submission loop: " << ex.what() << std::endl;
+            server_failed = true;
+            raise(SIGTERM);
+        }
+    });
+
+    std::thread imap4_thread([&]() {
+        try {
+            IoUringLoop imap4_loop(cfg.imap4_port);
+            imap4_loop.run();
+        } catch (const std::exception& ex) {
+            std::cerr << "[JAMS - FATAL] IMAP4 loop: " << ex.what() << std::endl;
             server_failed = true;
             raise(SIGTERM);
         }

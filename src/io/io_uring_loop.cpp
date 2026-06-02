@@ -40,7 +40,7 @@ IoUringLoop::IoUringLoop(uint16_t port, unsigned queue_depth) : port_(port) {
     const std::string csr = "/etc/jams/tls/mail.detraced.org.csr"; // Cert Signing Req/CA
     
     try {
-        tls_ctx_ = std::make_unique<TlsContext>(cert, key);
+        tls_ctx_ = std::make_unique<TlsContext>(cert, key, csr);
         std::cout << "[TLS] context loaded from: " << cert << std::endl;
     } catch (const std::exception& ex) {
         std::cerr << "[TLS] ERROR: Could not load key/cert: " << ex.what() << std::endl;
@@ -175,9 +175,9 @@ void IoUringLoop::run() {
                 case op_type::Write:
                     on_write(conn_id, res);
                     break;
-                // case op_type::Close:
-                //     on_close(conn_id);
-                //     break;
+                case op_type::Close:
+                    submit_close(conn_id);
+                    break;
             }
         }
 
@@ -347,16 +347,6 @@ void IoUringLoop::flush_write(uint64_t conn_id) {
     sqe->user_data = encode_userdata(op_type::Write, conn_id);
     bit->second.inflight++;
     submit();
-}
-
-void IoUringLoop::on_close(uint64_t conn_id) {
-    auto bit = buffers_.find(conn_id);
-    if (bit != buffers_.end()) {
-        buffers_.erase(bit);
-    }
-
-    sessions_.erase(conn_id);
-    tls_conns_.erase(conn_id);
 }
 
 void IoUringLoop::submit_write(uint64_t conn_id, std::vector<uint8_t> data) {
