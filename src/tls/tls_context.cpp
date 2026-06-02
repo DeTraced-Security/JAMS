@@ -11,16 +11,11 @@ static std::string ssl_error_string() {
     return buf;
 }
 
-TlsContext::TlsContext(const std::string& cert, const std::string& key, const std::string& csr) {    
+TlsContext::TlsContext(const std::string& cert, const std::string& key) {    
     // One-time init
     SSL_library_init();
     SSL_load_error_strings();
     OpenSSL_add_all_algorithms();
-
-    // Check to see our paths aren't empty first:
-    if (cert.empty() || key.empty() || csr.empty()) {
-        throw std::runtime_error("Unable to find Certificate, Key, or CSR/CA, paths may be empty!");
-    }
 
     // TLS1.2+ server context
     ctx_ = SSL_CTX_new(TLS_server_method());
@@ -30,9 +25,6 @@ TlsContext::TlsContext(const std::string& cert, const std::string& key, const st
 
     // enforce TLS 1.2 min
     SSL_CTX_set_min_proto_version(ctx_, TLS1_2_VERSION);
-
-    // Include CSR/CA certificate
-    SSL_CTX_add_extra_chain_cert(ctx_, csr.c_str());
 
     SSL_CTX_set_options(
         // CRIME vuln - We disable compression
@@ -58,10 +50,6 @@ TlsContext::TlsContext(const std::string& cert, const std::string& key, const st
 
     if (SSL_CTX_check_private_key(ctx_) != 1) {
         throw std::runtime_error("cert/key mismatch: " + ssl_error_string());
-    }
-
-    if (SSL_CTX_load_verify_locations(ctx_, csr.c_str(), nullptr) != 1) {
-        throw std::runtime_error("Unable to load CA chain: " + ssl_error_string());
     }
 }
 

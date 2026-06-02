@@ -39,10 +39,9 @@ IoUringLoop::IoUringLoop(
     // Initialise TLS:
     const std::string cert = "/etc/jams/tls/cert.pem";
     const std::string key = "/etc/jams/tls/key.pem";
-    const std::string csr = "/etc/jams/tls/mail.detraced.org.csr"; // Cert Signing Req/CA
     
     try {
-        tls_ctx_ = std::make_unique<TlsContext>(cert, key, csr);
+        tls_ctx_ = std::make_unique<TlsContext>(cert, key);
         std::cout << "[TLS] context loaded from: " << cert << std::endl;
     } catch (const std::exception& ex) {
         std::cerr << "[TLS] ERROR: Could not load key/cert: " << ex.what() << std::endl;

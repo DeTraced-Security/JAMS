@@ -74,6 +74,11 @@ std::vector<uint8_t> TlsConn::feed_encryption(std::span<const uint8_t> cipher_in
         }
     }
 
+    auto wbio_out = drain_wbio();
+    if (!wbio_out.empty()) {
+        pending_cipher.insert(pending_cipher.end(), wbio_out.begin(), wbio_out.end());
+    }
+
     return pending_cipher;
 }
 
