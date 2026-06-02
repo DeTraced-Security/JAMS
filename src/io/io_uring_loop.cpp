@@ -142,10 +142,13 @@ void IoUringLoop::run() {
 
         if (ret < 0) {
             std::cerr << "[io_uring] wait_cqe error: " << strerror(-ret) << std::endl;
+            continue; // skip the CQE if it's in a stale state
         }
 
-        unsigned head = 0;
+        unsigned head = 0, nr = 0;
         io_uring_for_each_cqe(&ring_, head, cqe) {
+            nr++; // increment next ring
+
             // Route DNS completions before trying to decode as SMTP ops
             uint64_t ud = cqe->user_data;
             int res = cqe->res;
@@ -177,7 +180,7 @@ void IoUringLoop::run() {
             }
         }
 
-        io_uring_cq_advance(&ring_, head);
+        io_uring_cq_advance(&ring_, nr);
     }
 
     std::cout << "[io_uring] loop exiting on port: " << port_ << std::endl;
@@ -387,17 +390,20 @@ void IoUringLoop::submit_write(uint64_t conn_id, std::vector<uint8_t> data) {
 
 void IoUringLoop::submit_close(uint64_t conn_id) {
     auto bit = buffers_.find(conn_id);
-    if (bit == buffers_.end() || bit->second.closing) {
+    if (bit == buffers_.end()) {
         return;
     }
 
-    std::cerr << "[submit_close] conn=" << conn_id 
+    if (!bit->second.closing) {
+        std::cerr << "[submit_close] conn=" << conn_id 
             << " inflight=" << bit->second.inflight
             << " write_queue=" << bit->second.write_queue.size()
             << " write_pending=" << bit->second.write_pending << "\n";
 
-    bit->second.closing = true;
+        bit->second.closing = true;
 
+    }
+    
     if (bit->second.inflight > 0) {
         return; // wait for the queue to drain
     }
