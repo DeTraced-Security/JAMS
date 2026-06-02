@@ -140,15 +140,9 @@ void SubmissionServer::cmd_ehlo(std::string_view arg) {
         "SIZE 52428800"
     };
 
-    // advertise TLS if the connection isn't encrypted
-    if (!tls_active_) {
-        caps.push_back("STARTTLS");
-    }
-
-    // Or auth if we're encrypted
-    if (tls_active_) {
-        caps.push_back("AUTH PLAIN LOGIN");
-    }
+    caps.push_back("STARTTLS"); 
+    // We reject AUTH without TLS, so no need to guard here
+    caps.push_back("AUTH PLAIN LOGIN");
 
     reply_multiline(250, caps);
 }
