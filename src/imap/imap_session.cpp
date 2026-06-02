@@ -227,7 +227,7 @@ namespace IMAP {
         // Strip quotes from mailbox name
         std::string mbox = mailbox;
         if (mbox.size() >= 2 && mbox.front() == '"' && mbox.back() == '"') {
-            mbox.substr(1, mbox.size() - 2);
+            mbox = mbox.substr(1, mbox.size() - 2);
         }
 
         if (mbox.empty()) {
@@ -265,13 +265,13 @@ namespace IMAP {
     }
 
     
-    void IMAPSession::cmd_list(const std::string& tag, const std::string& args) {
+    void IMAPSession::cmd_list(const std::string& tag, const std::string& /* args */) {
         // Minimal LIST, beta will extend off this
         untagged("LIST (\\HasNoChildren) \"/\" \"INBOX\"");
         ok(tag, "LIST completed");   
     }
 
-    void IMAPSession::cmd_lsub(const std::string& tag, const std::string& args) {
+    void IMAPSession::cmd_lsub(const std::string& tag, const std::string& /* args */) {
         // Likewise with cmd_list, beta will extend this
         untagged("LSUB () \"/\" \"INBOX\"");
         ok(tag, "LSUB completed");
@@ -413,7 +413,7 @@ namespace IMAP {
         return std::vector<uint8_t>(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
     }
 
-    std::string IMAPSession::build_envelope(const MessageMeta& msg) const {
+    std::string IMAPSession::build_envelope(const MessageMeta& /* msg */) const {
         // Synthetic headers to so clients can display something before decryption
         return "(NIL NIL NIL NIL NIL NIL NIL NIL NIL NIL)";
     }
