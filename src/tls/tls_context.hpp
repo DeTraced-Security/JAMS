@@ -6,7 +6,7 @@
 
 class TlsContext {
     public:
-        TlsContext(const std::string& cert, const std::string& key);
+        TlsContext(const std::string& cert, const std::string& key, const std::string& csr);
         ~TlsContext();
 
         TlsContext(const TlsContext&) = delete;

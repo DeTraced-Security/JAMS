@@ -189,7 +189,7 @@ void SMTPSession::cmd_data() {
         return;
     }
 
-    reply_code(354, "Start mail input; end with <CLRF>.<CLRF>");
+    reply_code(354, "Start mail input; end with <CRLF>.<CRLF>");
     state_ = SMTPState::Data;
     line_buf.clear();
     data_tail_.clear();

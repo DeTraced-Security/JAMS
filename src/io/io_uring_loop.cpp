@@ -37,6 +37,7 @@ IoUringLoop::IoUringLoop(uint16_t port, unsigned queue_depth) : port_(port) {
     // Initialise TLS:
     const std::string cert = "/etc/jams/tls/cert.pem";
     const std::string key = "/etc/jams/tls/key.pem";
+    const std::string csr = "/etc/jams/tls/mail.detraced.org.csr"; // Cert Signing Req/CA
     
     try {
         tls_ctx_ = std::make_unique<TlsContext>(cert, key);
