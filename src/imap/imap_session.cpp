@@ -89,7 +89,7 @@ void IMAPSession::process_line(const std::string& line) {
         }
 
         if (command == "AUTHENTICATE") {
-            no(tag, "Use LOGIN or STARTTLS");
+            cmd_auth(tag, args);
             return;
         }
 
