@@ -18,7 +18,7 @@ namespace IMAP {
     ) : conn_id_(conn_id), remote_ip_(remote_ip), loop_(loop), cred_store_(cred_store),
         mail_root_(mail_root) {
             // Send greeting on connect
-            untagged("OK [CAPABILITY IMAPrev1 STARTTLS AUTH=PLAIN IDLE] JAMS IMAP server ready");
+            untagged("OK [CAPABILITY IMAPrev4 STARTTLS AUTH=PLAIN IDLE] JAMS IMAP server ready");
         }
     
     void IMAPSession::on_data(std::span<const uint8_t> bytes) {

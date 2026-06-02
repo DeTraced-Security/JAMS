@@ -73,7 +73,7 @@ class IoUringLoop {
         /// @brief Submit writes to the io_uring queue
         /// @param conn_id 
         /// @param data 
-        void submit_write(uint64_t conn_id, std::vector<uint8_t> data);
+        void submit_write(uint64_t conn_id, std::vector<uint8_t> data, bool raw = false);
 
         /// @brief Submit close requests to io_uring for clean shutdowns
         /// and prevent leaking data after close

@@ -258,7 +258,7 @@ void IoUringLoop::on_read(uint64_t conn_id, int res) {
         {
             auto to_send = tit->second->feed_encryption(data);
             if (!to_send.empty()) {
-                submit_write(conn_id, std::move(to_send));
+                submit_write(conn_id, std::move(to_send), true);
             }
         }
         catch(const std::exception& e)
@@ -349,7 +349,7 @@ void IoUringLoop::flush_write(uint64_t conn_id) {
     submit();
 }
 
-void IoUringLoop::submit_write(uint64_t conn_id, std::vector<uint8_t> data) {
+void IoUringLoop::submit_write(uint64_t conn_id, std::vector<uint8_t> data, bool raw) {
     auto bit = buffers_.find(conn_id);
     
     if (bit == buffers_.end()) {
@@ -357,16 +357,20 @@ void IoUringLoop::submit_write(uint64_t conn_id, std::vector<uint8_t> data) {
         return;
     }
 
-    auto tit = tls_conns_.find(conn_id);
+    // Only encrypt if the text is plain
+    if (!raw) {
+        auto tit = tls_conns_.find(conn_id);
 
-    if (tit != tls_conns_.end() && tit->second->handshake_done()) {
-        try {
-            data = tit->second->encrypt(data);
-        } catch (const std::exception& ex) {
-            std::cerr << "[TLS] conn=" << conn_id << " encrypt error: " << ex.what() << std::endl;
-            submit_close(conn_id);
-            return;
+        if (tit != tls_conns_.end() && tit->second->handshake_done()) {
+            try {
+                data = tit->second->encrypt(data);
+            } catch (const std::exception& ex) {
+                std::cerr << "[TLS] conn=" << conn_id << " encrypt error: " << ex.what() << std::endl;
+                submit_close(conn_id);
+                return;
+            }
         }
+
     }
 
     // To keep the buffer alive until a completion fires,
