@@ -50,7 +50,8 @@ static void banner() {
 struct Config {
     uint16_t smtp_port{25};
     uint16_t submission_port{587};
-    uint16_t imap4_port{993};
+    uint16_t imap4_secure_port{993};
+    uint16_t imap4_port{143};
     std::string db_path{"/var/lib/jams/users.db"};
 };
 
@@ -170,8 +171,20 @@ int main(int argc, char* argv[]) {
         }
     });
 
+    std::thread imap4_secure_thread([&]() {
+        try {
+            IoUringLoop imap4_secure_loop(cfg.imap4_secure_port);
+            imap4_secure_loop.run();
+        } catch (const std::exception& ex) {
+            std::cerr << "[JAMS - FATAL] IMAP4 Secure loop: " << ex.what() << std::endl;
+            server_failed = true;
+            raise(SIGTERM);
+        }
+    });
+
     smtp_thread.join();
     submission_thread.join();
+    imap4_thread.join();
 
     std::cout << "[JAMS] Shutdown complete" << std::endl;
     return server_failed ? EXIT_FAILURE : 0;
