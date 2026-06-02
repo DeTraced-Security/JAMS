@@ -2,6 +2,7 @@
 
 #include "auth/sasl.hpp"
 #include "auth/cred_store.hpp"
+#include "io/session_factory.hpp"
 #include "smtp_session.hpp"
 #include <cstdint>
 #include <memory>
@@ -25,7 +26,7 @@ class IoUringLoop;
 // TLS requirement:
 //   AUTH is only advertised after STARTTLS. If a client attempts AUTH
 //   before TLS is established, we respond with 538 (encryption required).
-class SubmissionServer {
+class SubmissionServer : public Session {
     public:
         SubmissionServer(
             uint64_t conn_id, const std::string& remote_ip,

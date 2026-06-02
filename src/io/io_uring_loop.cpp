@@ -15,7 +15,9 @@
 #include <iostream>
 #include <cassert>
 
-IoUringLoop::IoUringLoop(uint16_t port, unsigned queue_depth) : port_(port) {
+IoUringLoop::IoUringLoop(
+    uint16_t port, SessionFactory factory, unsigned queue_depth
+) : port_(port), session_factory_(std::move(factory)) {
     io_uring_params params{};
     params.flags = 0;
 
@@ -215,7 +217,7 @@ void IoUringLoop::on_accept(int /*fd*/, int res) {
     buf.read_buf.resize(READ_BUF_SIZE);
 
     // queue the 220 Banner (making the session available)
-    sessions_[cid] = std::make_unique<SMTPSession>(cid, ip_buf, *this);
+    sessions_[cid] = session_factory_(cid, ip_buf, *this);
 
     // Arming connection reads
     io_uring_sqe* sqe = get_sqe();

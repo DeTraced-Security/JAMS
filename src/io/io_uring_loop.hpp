@@ -10,7 +10,7 @@
 #include <span>
 #include <vector>
 #include <deque>
-
+#include "session_factory.hpp"
 #include "tls/tls_context.hpp"
 #include "tls/tls_conn.hpp"
 #include "dns/dns_resolver.hpp"
@@ -58,10 +58,12 @@ class TlsConn;
  */
 class IoUringLoop {
     public:
+        using SessionFactory = std::function<std::unique_ptr<Session>(uint64_t, const std::string&, IoUringLoop&)>;
+
         /// @brief Initialise io_uring with a queue depth of 256
         /// @param port 
         /// @param queue_depth 
-        explicit IoUringLoop(uint16_t port, unsigned queue_depth = 256);
+        explicit IoUringLoop(uint16_t port, SessionFactory factory, unsigned queue_depth = 256);
         ~IoUringLoop();
 
         IoUringLoop(const IoUringLoop&) = delete;
@@ -121,6 +123,8 @@ class IoUringLoop {
 
         void flush_write(uint64_t conn_id);
 
+        SessionFactory session_factory_;
+
         uint16_t port_;
         int listen_fd_{-1};
 
@@ -145,6 +149,6 @@ class IoUringLoop {
 
         uint64_t next_conn_id{1};
         std::unordered_map<uint64_t, ConnBuffer> buffers_;
-        std::unordered_map<uint64_t, std::unique_ptr<SMTPSession>> sessions_;
+        std::unordered_map<uint64_t, std::unique_ptr<Session>> sessions_;
         std::unordered_map<uint64_t, std::unique_ptr<TlsConn>> tls_conns_;
 };
