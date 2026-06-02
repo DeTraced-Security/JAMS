@@ -201,6 +201,11 @@ void IMAPSession::cmd_login(const std::string& tag, const std::string& args) {
     user = read_token(ss);
     pass = read_token(ss);
 
+    auto at = user.find('@');
+    if (at != std::string::npos) {
+        user = user.substr(0, at);
+    }
+
     if (user.empty() || pass.empty()) {
         bad(tag, "LOGIN requres username and password");
         return;
