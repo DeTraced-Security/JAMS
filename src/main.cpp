@@ -1,5 +1,8 @@
 #include "io/io_uring_loop.hpp"
 #include "auth/cred_store.hpp"
+#include "smtp/smtp_session.hpp"
+#include "smtp/submission_server.hpp"
+#include "imap/imap_session.hpp"
 #include <csignal>
 #include <cstring>
 #include <stdexcept>
@@ -50,6 +53,8 @@ static void banner() {
 struct Config {
     uint16_t smtp_port{25};
     uint16_t submission_port{587};
+    uint16_t imap4_secure_port{993};
+    uint16_t imap4_port{143};
     std::string db_path{"/var/lib/jams/users.db"};
 };
 
@@ -138,7 +143,9 @@ int main(int argc, char* argv[]) {
 
     std::thread smtp_thread([&]() {
         try {
-            IoUringLoop smtp_loop(cfg.smtp_port);
+            IoUringLoop smtp_loop(cfg.smtp_port, [](uint64_t id, const std::string& ip, IoUringLoop& loop) {
+                return std::make_unique<SMTPSession>(id, ip, loop);
+            });
             smtp_loop.run();
         } catch (const std::exception& ex) {
             std::cerr << "[JAMS - FATAL] SMTP loop: " << ex.what() << std::endl; 
@@ -149,7 +156,9 @@ int main(int argc, char* argv[]) {
 
     std::thread submission_thread([&]() {
         try {
-            IoUringLoop submission_loop(cfg.submission_port);
+            IoUringLoop submission_loop(cfg.submission_port, [&cred_store](uint64_t id, const std::string& ip, IoUringLoop& loop) {
+                return std::make_unique<SubmissionServer>(id, ip, loop, cred_store);
+            });
             submission_loop.run();
         } catch(const std::exception& ex) {
             std::cerr << "[JAMS - FATAL] Submission loop: " << ex.what() << std::endl;
@@ -158,8 +167,36 @@ int main(int argc, char* argv[]) {
         }
     });
 
+    std::thread imap4_thread([&]() {
+        try {
+            IoUringLoop imap4_loop(cfg.imap4_port, [&cred_store](uint64_t id, const std::string& ip, IoUringLoop& loop) {
+                return std::make_unique<IMAPSession>(id, ip, loop, cred_store, "/var/mail/jams");
+            });
+            imap4_loop.run();
+        } catch (const std::exception& ex) {
+            std::cerr << "[JAMS - FATAL] IMAP4 loop: " << ex.what() << std::endl;
+            server_failed = true;
+            raise(SIGTERM);
+        }
+    });
+
+    std::thread imap4_secure_thread([&]() {
+        try {
+            IoUringLoop imap4_secure_loop(cfg.imap4_secure_port, [&cred_store](uint64_t id, const std::string& ip, IoUringLoop& loop) {
+                return std::make_unique<IMAPSession>(id, ip, loop, cred_store, "/var/mail/jams");
+            });
+            imap4_secure_loop.run();
+        } catch (const std::exception& ex) {
+            std::cerr << "[JAMS - FATAL] IMAP4 Secure loop: " << ex.what() << std::endl;
+            server_failed = true;
+            raise(SIGTERM);
+        }
+    });
+
     smtp_thread.join();
     submission_thread.join();
+    imap4_thread.join();
+    imap4_secure_thread.join();
 
     std::cout << "[JAMS] Shutdown complete" << std::endl;
     return server_failed ? EXIT_FAILURE : 0;

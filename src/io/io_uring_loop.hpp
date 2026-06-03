@@ -9,7 +9,8 @@
 #include <unordered_map>
 #include <span>
 #include <vector>
-
+#include <deque>
+#include "session_factory.hpp"
 #include "tls/tls_context.hpp"
 #include "tls/tls_conn.hpp"
 #include "dns/dns_resolver.hpp"
@@ -57,10 +58,12 @@ class TlsConn;
  */
 class IoUringLoop {
     public:
+        using SessionFactory = std::function<std::unique_ptr<Session>(uint64_t, const std::string&, IoUringLoop&)>;
+
         /// @brief Initialise io_uring with a queue depth of 256
         /// @param port 
         /// @param queue_depth 
-        explicit IoUringLoop(uint16_t port, unsigned queue_depth = 256);
+        explicit IoUringLoop(uint16_t port, SessionFactory factory, unsigned queue_depth = 256);
         ~IoUringLoop();
 
         IoUringLoop(const IoUringLoop&) = delete;
@@ -72,7 +75,7 @@ class IoUringLoop {
         /// @brief Submit writes to the io_uring queue
         /// @param conn_id 
         /// @param data 
-        void submit_write(uint64_t conn_id, std::vector<uint8_t> data);
+        void submit_write(uint64_t conn_id, std::vector<uint8_t> data, bool raw = false);
 
         /// @brief Submit close requests to io_uring for clean shutdowns
         /// and prevent leaking data after close
@@ -87,6 +90,11 @@ class IoUringLoop {
         /// @return 
         DNS::DNSResolver& dns_resolver() {
             return *dns_resolver_;
+        }
+
+        bool is_tls_active(uint64_t conn_id)  const {
+            auto itr = tls_conns_.find(conn_id);
+            return itr != tls_conns_.end() && itr->second->handshake_done();
         }
 
     private:
@@ -111,16 +119,14 @@ class IoUringLoop {
         /// @param res 
         void on_write(uint64_t conn_id, int res);
 
-        /// @brief Cleanly close server connections
-        /// @param conn_id 
-        void on_close(uint64_t conn_id);
-
         /// @brief Get the applicable Session Que Entry (SQE)
         /// @return 
         io_uring_sqe* get_sqe();
 
         /// @brief Submit the process to io_uring
         void submit();
+
+        void flush_write(uint64_t conn_id);
 
         uint16_t port_;
         int listen_fd_{-1};
@@ -137,12 +143,17 @@ class IoUringLoop {
         static constexpr size_t READ_BUF_SIZE = 8192;
         struct ConnBuffer {
             std::vector<uint8_t> read_buf;
-            std::vector<uint8_t> write_buf;
+            std::deque<std::vector<uint8_t>> write_queue;
+            bool write_pending{false};
+            bool closing{false};
+            int inflight{0};
             int fd{-1};
         };
 
+        SessionFactory session_factory_;
+
         uint64_t next_conn_id{1};
         std::unordered_map<uint64_t, ConnBuffer> buffers_;
-        std::unordered_map<uint64_t, std::unique_ptr<SMTPSession>> sessions_;
+        std::unordered_map<uint64_t, std::unique_ptr<Session>> sessions_;
         std::unordered_map<uint64_t, std::unique_ptr<TlsConn>> tls_conns_;
 };

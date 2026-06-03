@@ -189,7 +189,7 @@ void SMTPSession::cmd_data() {
         return;
     }
 
-    reply_code(354, "Start mail input; end with <CLRF>.<CLRF>");
+    reply_code(354, "Start mail input; end with <CRLF>.<CRLF>");
     state_ = SMTPState::Data;
     line_buf.clear();
     data_tail_.clear();
@@ -208,7 +208,7 @@ void SMTPSession::cmd_noop() {
 void SMTPSession::cmd_quit() {
     reply_code(221, "mail.detraced.org closing connection");
     state_ = SMTPState::Done;
-    loop_.submit_close(conn_id_);
+    pending_close_ = true;
 }
 
 void SMTPSession::cmd_starttls() {

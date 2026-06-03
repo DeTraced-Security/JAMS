@@ -57,6 +57,7 @@ set(SOURCES
     src/auth/dkim_verifier.cpp
     src/auth/cred_store.cpp
     src/smtp/submission_server.cpp
+    src/imap/imap_session.cpp
 )
 
 add_executable(mailserver ${SOURCES})

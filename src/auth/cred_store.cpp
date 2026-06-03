@@ -96,10 +96,11 @@ namespace Auth {
         }
 
         sqlite3_stmt* stmt = nullptr;
-        const char* sql = "SELECT hash, salt, iterations, FROM users "
+        const char* sql = "SELECT hash, salt, iterations FROM users "
             "WHERE username = ? AND active = 1";
         
         if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+            std::cerr << "[auth] SQL Account Verification perpare failed: " << sqlite3_errmsg(db_) << std::endl;
             return false;
         }
 
@@ -211,23 +212,23 @@ namespace Auth {
         return ok;
     }
 
-    bool CredentialStore::user_exists(const std::string& username) {
-        sqlite3_stmt* stmt{nullptr};
+bool CredentialStore::user_exists(const std::string& username) {
+    sqlite3_stmt* stmt{nullptr};
 
-        if (sqlite3_prepare_v2(
-            db_, "SELECT 1 FROM users WHERE username = ?",
-            -1, &stmt, nullptr
-        ) != SQLITE_OK) {
-            return false;
-        }
-
-        sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
-
-        bool ok = (sqlite3_step(stmt) == SQLITE_DONE);
-        sqlite3_finalize(stmt);
-
-        return ok;
+    if (sqlite3_prepare_v2(
+        db_, "SELECT 1 FROM users WHERE username = ?",
+        -1, &stmt, nullptr
+    ) != SQLITE_OK) {
+        return false;
     }
+
+    sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_TRANSIENT);
+
+    bool ok = (sqlite3_step(stmt) == SQLITE_ROW);
+    sqlite3_finalize(stmt);
+
+    return ok;
+}
 
     CredentialStore::HashedPassword CredentialStore::hash_password(
         const std::string& passwd

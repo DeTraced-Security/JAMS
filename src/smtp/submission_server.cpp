@@ -13,7 +13,7 @@ SubmissionServer::SubmissionServer(
         reply(220, "mail.detraced.org ESMTP submission");
 }
 
-void SubmissionServer::on_tls_established() {
+void SubmissionServer::on_tls_established() {    
     tls_active_ = true;
     
     // No banner needed here, EHLO is received after the handshake
@@ -140,13 +140,12 @@ void SubmissionServer::cmd_ehlo(std::string_view arg) {
         "SIZE 52428800"
     };
 
-    // advertise TLS if the connection isn't encrypted
-    if (!tls_active_) {
-        caps.push_back("STARTTLS");
-    }
-
-    // Or auth if we're encrypted
-    if (tls_active_) {
+    if (loop_.is_tls_active(conn_id_)) {
+        caps.push_back("AUTH PLAIN LOGIN");
+    } else {
+        /// Note: kept for Outlook compat.
+        caps.push_back("STARTTLS"); 
+        // We reject AUTH without TLS, so no need to guard here
         caps.push_back("AUTH PLAIN LOGIN");
     }
 
@@ -154,7 +153,7 @@ void SubmissionServer::cmd_ehlo(std::string_view arg) {
 }
 
 void SubmissionServer::cmd_starttls() {
-    if (tls_active_) {
+    if (loop_.is_tls_active(conn_id_)) {
         reply(503, "TLS Already Active");
         return;
     }
@@ -168,7 +167,7 @@ void SubmissionServer::cmd_starttls() {
 }
 
 void SubmissionServer::cmd_auth(std::string_view arg) {
-    if (!tls_active_) {
+    if (!loop_.is_tls_active(conn_id_)) {
         reply(538, "5.7.11 Encryption required for AUTH");
         return;
     }
@@ -291,6 +290,7 @@ void SubmissionServer::cmd_noop() {
 void SubmissionServer::cmd_quit() {
     reply(221, "mail.detraced.org closing connection");
     state_ = State::Done;
+    pending_close_ = true;
     loop_.submit_close(conn_id_);
 }
 

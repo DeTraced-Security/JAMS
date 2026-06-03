@@ -11,7 +11,7 @@ static std::string ssl_error_string() {
     return buf;
 }
 
-TlsContext::TlsContext(const std::string& cert, const std::string& key) {
+TlsContext::TlsContext(const std::string& cert, const std::string& key) {    
     // One-time init
     SSL_library_init();
     SSL_load_error_strings();

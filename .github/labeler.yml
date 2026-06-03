@@ -29,6 +29,11 @@ smtp:
       - any-glob-to-any-file:
           - 'src/smtp/**'
 
+imap4:
+    - changed-files:
+        - any-glob-to-any-file:
+            - 'src/imap/**'
+
 storage:
   - changed-files:
       - any-glob-to-any-file:

@@ -204,7 +204,7 @@ namespace DMARC {
         std::string token;
 
         while (std::getline(ss, token, ';')) {
-            // Trim CLRF
+            // Trim CRLF
             auto start = token.find_first_not_of(" \t\r\n");
             auto end   = token.find_last_not_of(" \t\r\n");
             if (start == std::string::npos) continue;

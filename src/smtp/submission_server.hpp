@@ -2,6 +2,7 @@
 
 #include "auth/sasl.hpp"
 #include "auth/cred_store.hpp"
+#include "io/session_factory.hpp"
 #include "smtp_session.hpp"
 #include <cstdint>
 #include <memory>
@@ -25,7 +26,7 @@ class IoUringLoop;
 // TLS requirement:
 //   AUTH is only advertised after STARTTLS. If a client attempts AUTH
 //   before TLS is established, we respond with 538 (encryption required).
-class SubmissionServer {
+class SubmissionServer : public Session {
     public:
         SubmissionServer(
             uint64_t conn_id, const std::string& remote_ip,
@@ -43,6 +44,10 @@ class SubmissionServer {
         /// @return 
         bool is_authenticated() const {
             return sasl_.authenticated();
+        }
+
+        bool wants_close() const override {
+            return pending_close_;
         }
     
     private:
@@ -129,6 +134,8 @@ class SubmissionServer {
         bool tls_active_{false};
         std::string line_buf_;
         std::string data_tail_;
+
+        bool pending_close_{false};
 
         struct Envelope {
             std::string mail_from;

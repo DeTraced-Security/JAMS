@@ -1,5 +1,6 @@
 #pragma once
 
+#include "io/session_factory.hpp"
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -22,7 +23,7 @@ struct Envelope {
     std::string body;
 };
 
-class SMTPSession {
+class SMTPSession : public Session {
     public:
         /// @brief Creates the SMTP Session
         /// @param conn_id 
@@ -38,6 +39,11 @@ class SMTPSession {
         /// @param bytes 
         void on_data(std::span<const uint8_t> bytes);
 
+        bool pending_close_{false};
+        bool wants_close() const {
+            return pending_close_;
+        }
+        
     private:
         /// @brief Processes commands received from on-wire data
         /// @param line 
