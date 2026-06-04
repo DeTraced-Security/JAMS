@@ -387,16 +387,24 @@ bool SubmissionServer::relay_outbound(
             break;
         }
 
-        uint16_t type = ntohs(*reinterpret_cast<uint16_t*>(ptr));
+        uint16_t type;
+        memcpy(&type, ptr, 2);
+        type = ntohs(type);
         ptr += 2;
         ptr += 2; // class
         ptr += 4; // ttl
-        uint16_t rdlen = ntohs(*reinterpret_cast<uint16_t*>(ptr));
+
+        uint16_t rdlen;
+        memcpy(&rdlen, ptr, 2);
+        rdlen = ntohs(rdlen);
         ptr += 2;
+
         unsigned char* rdata_end = ptr + rdlen;
 
         if (type == T_MX && ptr + 2 <= end) {
-            uint16_t prio = ntohs(*reinterpret_cast<uint16_t*>(ptr));
+            uint16_t prio;
+            memcpy(&prio, ptr, 2);
+            prio = ntohs(prio);
             ptr += 2;
 
             char host[256] = {};

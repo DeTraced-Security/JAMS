@@ -272,9 +272,47 @@ void IMAPSession::cmd_starttls(const std::string& tag) {
     loop_.upgrade_tls(conn_id_);
 }
 
-void IMAPSession::cmd_uid_search(const std::string& tag, const std::string& /* args */) {
-    untagged("SEARCH");
-    // Stub, will implement search in beta
+void IMAPSession::cmd_uid_search(const std::string& tag, const std::string& args) {
+    std::string upper = args;
+    std::transform(upper.begin(), upper.end(), upper.begin(), ::toupper);
+
+    std::vector<uint32_t> results;
+    auto since_pos = upper.find("SINCE ");
+
+    if (since_pos != std::string::npos) {
+        std::string date_str = args.substr(since_pos + 6);
+        while (!date_str.empty() && std::isspace(date_str.front())) {
+            date_str.erase(0, 1);
+        }
+        while(!date_str.empty() && std::isspace(date_str.back())) {
+            date_str.pop_back();
+        }
+
+        struct tm tm{};
+        if (strptime(date_str.c_str(), "%d-%b-%Y", &tm)) {
+            tm.tm_hour = 0;
+            tm.tm_sec = 0;
+            tm.tm_isdst = -1;
+            time_t since_t = mktime(&tm);
+
+            for (const auto& msg : messages_) {
+                if (static_cast<time_t>(msg.uuid) >= since_t) {
+                    results.push_back(msg.uuid);
+                }
+            }
+        }
+    } else {
+        for (const auto& msg : messages_) {
+            results.push_back(msg.uuid);
+        }
+    }
+
+    std::string response = "SEARCH";
+    for (uint32_t uid : results) {
+        response += " " + std::to_string(uid);
+    }
+
+    untagged(response);
     ok(tag, "UID SEARCH completed");
 }
 
