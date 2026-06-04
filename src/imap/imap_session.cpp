@@ -519,6 +519,7 @@ void IMAPSession::cmd_login(const std::string& tag, const std::string& args) {
 
     username_ = user;
     state_ = State::Authenticated;
+    ensure_standard_folders();
     
     std::cout << "[IMAP] " << conn_id_ << " authenticated: " << username_ << std::endl;
 
@@ -569,6 +570,11 @@ void IMAPSession::cmd_select(
     }
 }
 
+void IMAPSession::ensure_standard_folders() {
+    for (const char* folder : {"Sent", "Drafts", "Junk", "Trash"}) {
+        ensure_mailbox_dirs(folder);
+    }
+}
 
 void IMAPSession::cmd_list(const std::string& tag, const std::string& /* args */) {
     untagged("LIST (\\HasNoChildren) \"/\" \"INBOX\"");
@@ -585,6 +591,10 @@ void IMAPSession::cmd_list(const std::string& tag, const std::string& /* args */
             }
 
             std::string mbox = name.substr(1);
+            if (mbox == "cur" || mbox == "new" || mbox == "tmp") {
+                continue;
+            }
+
             untagged("LIST (\\HasNoChildren) \"/\" \"" + mbox + "\"");
         }
 

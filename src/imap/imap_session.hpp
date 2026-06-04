@@ -114,6 +114,8 @@ class IMAPSession : public Session {
 
         void ensure_mailbox_dirs(const std::string& mailbox);
 
+        void ensure_standard_folders();
+
         std::vector<uint32_t> parse_sequence_set(const std::string& set) const;
 
         /// @brief Fetches the given message from the maildir
