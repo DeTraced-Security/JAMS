@@ -738,6 +738,16 @@ std::string IMAPSession::fetch_message(
         );
     }
 
+    if (upper.find("INTERNALDATE") != std::string::npos) {
+        // Format: "04-Jun-2026 09:49:10 +0000"
+        time_t t = static_cast<time_t>(msg.uuid);
+        struct tm tm{};
+        gmtime_r(&t, &tm);
+        char buf[64];
+        strftime(buf, sizeof(buf), "\"%d-%b-%Y %H:%M:%S +0000\"", &tm);
+        add(std::string("INTERNALDATE ") + buf);
+    }
+
     result += ')';
     return result;
 }
