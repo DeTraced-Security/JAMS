@@ -80,6 +80,13 @@ class IMAPSession : public Session {
 
         void cmd_auth(const std::string& tag, const std::string& args);
 
+        void cmd_append(const std::string& tag, const std::string& args);
+
+        void cmd_create(const std::string& tag, const std::string& args);
+
+        void complete_append();
+
+
         void complete_plain_auth(const std::string& tag, const std::string& b64);
         
         void cmd_select(
@@ -102,6 +109,8 @@ class IMAPSession : public Session {
         void cmd_check(const std::string& tag);
         
         void cmd_close(const std::string& tag);
+
+        void IMAPSession::ensure_mailbox_dirs(const std::string& mailbox);
 
         std::vector<uint32_t> parse_sequence_set(const std::string& set) const;
 
@@ -186,6 +195,14 @@ class IMAPSession : public Session {
         bool read_only_{false};
         bool auth_pending_{false};
         std::string auth_tag_;
+
+        // APPEND ingestion state
+        bool literal_pending_{false};
+        size_t literal_remaining_{0};
+        std::vector<uint8_t> literal_buf_;
+        std::string append_tag_;
+        std::string append_mailbox_;
+        std::string append_flags_;
         
         std::vector<MessageMeta> messages_;
         uint32_t next_uuid_{1}; // The next UUID to assign
