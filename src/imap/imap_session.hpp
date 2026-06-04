@@ -110,6 +110,8 @@ class IMAPSession : public Session {
         
         void cmd_close(const std::string& tag);
 
+        void cmd_uid_search(const std::string& tag, const std::string& args);
+
         void ensure_mailbox_dirs(const std::string& mailbox);
 
         std::vector<uint32_t> parse_sequence_set(const std::string& set) const;
@@ -203,7 +205,8 @@ class IMAPSession : public Session {
         std::string append_tag_;
         std::string append_mailbox_;
         std::string append_flags_;
-        
+        static std::atomic<uint32_t> append_seq_;
+
         std::vector<MessageMeta> messages_;
         uint32_t next_uuid_{1}; // The next UUID to assign
 };

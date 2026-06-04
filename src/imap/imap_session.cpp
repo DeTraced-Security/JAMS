@@ -181,6 +181,36 @@ void IMAPSession::process_line(const std::string& line) {
             ok(tag, command + " completed");
             return;
         }
+
+        if (command == "UID") {
+            std::istringstream uid_ss(args);
+            std::string uid_cmd;
+            std::string uid_args;
+            uid_ss >> uid_cmd;
+            std::getline(uid_ss, uid_args);
+
+            if (!uid_args.empty() && uid_args.front() == ' ') {
+                uid_args.erase(0, 1);
+            }
+
+            std::transform(uid_cmd.begin(), uid_cmd.end(), uid_cmd.begin(), ::toupper);
+
+            if (uid_cmd == "FETCH") {
+                cmd_fetch(tag, uid_args);
+                return;
+            }
+            if (uid_cmd == "SEARCH") {
+                cmd_uid_search(tag, uid_args);
+                return;
+            }
+            if (uid_cmd == "STORE") {
+                cmd_store(tag, uid_args);
+                return;
+            }
+
+            bad(tag, "Unknown UID command");
+            return;
+        }
     }
 
     /// Commands only available to the Selected state, after AUTH
@@ -240,6 +270,12 @@ void IMAPSession::cmd_starttls(const std::string& tag) {
     ok(tag, "Begin TLS negotiation");
 
     loop_.upgrade_tls(conn_id_);
+}
+
+void IMAPSession::cmd_uid_search(const std::string& tag, const std::string& args) {
+    untagged("SEARCH");
+    // Stub, will implement search in beta
+    ok(tag, "UID SEARCH completed");
 }
 
 void IMAPSession::cmd_append(const std::string& tag, const std::string& args) {
@@ -343,7 +379,9 @@ void IMAPSession::complete_append() {
     auto secs = std::chrono::duration_cast<std::chrono::seconds>(
         now.time_since_epoch()
     ).count();
-    std::string fname = std::to_string(secs) + "." + std::to_string(::getpid()) + ".jams_append";
+    std::string fname = std::to_string(secs) 
+        + "." + std::to_string(::getpid()) + "." + std::to_string(append_seq_++)
+        + ".jams_append";
 
     // Map flags to suffix characters
     std::string flag_chars;
