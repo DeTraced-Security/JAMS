@@ -733,7 +733,7 @@ std::string IMAPSession::fetch_message(
     ) {
         auto blob = read_blob(msg);
         add(
-            "BODY{} {" + std::to_string(blob.size()) + "}\r\n" + 
+            "BODY[] {" + std::to_string(blob.size()) + "}\r\n" + 
             std::string(blob.begin(), blob.end())
         );
     }
