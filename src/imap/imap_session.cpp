@@ -48,6 +48,23 @@ void IMAPSession::on_data(std::span<const uint8_t> bytes) {
 
             process_line(line_buf_);
             line_buf_.clear();
+
+            // Drain any literal bytes that arrived in the same call
+            if (literal_pending_ && literal_remaining_ > 0) {
+                size_t avail = bytes.size() - (i + 1);
+                size_t take  = std::min(avail, literal_remaining_);
+                auto   start = bytes.begin() + i + 1;
+
+                literal_buf_.insert(literal_buf_.end(), start, start + take);
+                literal_remaining_ -= take;
+                i += take;
+
+                if (literal_remaining_ == 0) {
+                    literal_pending_ = false;
+                    complete_append();
+                }
+            }
+
         } else {
             line_buf_ += static_cast<char>(b);
 
@@ -131,6 +148,7 @@ void IMAPSession::process_line(const std::string& line) {
 
         if (command == "EXAMINE") {
             cmd_select(tag, args, true);
+            return;
         }
 
         if (command == "LIST") {
@@ -155,6 +173,12 @@ void IMAPSession::process_line(const std::string& line) {
 
         if (command == "CREATE") {
             cmd_create(tag, args);
+            return;
+        }
+
+        if (command == "SUBSCRIBE" || command == "UNSUBSCRIBE") {
+            // stub until Subscribe is implemented (beta)
+            ok(tag, command + " completed");
             return;
         }
     }
@@ -269,6 +293,7 @@ void IMAPSession::cmd_append(const std::string& tag, const std::string& args) {
     // Must end in {size}
     if (rest.empty() || rest.front() != '{' || rest.back() != '}') {
         bad(tag, "APPEND literal size missing");
+        return;
     }
 
     size_t sz = 0;
@@ -738,7 +763,7 @@ void IMAPSession::cmd_expunge(const std::string& tag) {
         if (msg.flags.find("\\Deleted") != std::string::npos) {
             // Delete the file!
             std::string dir = msg.in_cur ? "/cur/" : "/new/";
-            std::string path = mail_root_ + username_ + dir + msg.filename;
+            std::string path = mail_root_+  "/" + username_ + dir + msg.filename;
 
             ::unlink(path.c_str());
             untagged(std::to_string(seq) + " EXPUNGE");
