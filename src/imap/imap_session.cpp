@@ -596,7 +596,7 @@ void IMAPSession::cmd_list(const std::string& tag, const std::string& /* args */
 
 void IMAPSession::cmd_lsub(const std::string& tag, const std::string& /* args */) {
     // Beta will introduce subscribed folders, for now this mirrors LIST
-    untagged("LSUB () \"/\" \"INBOX\"");
+    untagged("LSUB (\\HasNoChildren) \"/\" \"INBOX\"");
 
     std::string user_root = mail_root_ + "/" + username_;
     DIR* d = ::opendir(user_root.c_str());
@@ -610,6 +610,11 @@ void IMAPSession::cmd_lsub(const std::string& tag, const std::string& /* args */
             }
 
             std::string mbox = name.substr(1);
+
+            if (mbox == "cur" || mbox == "new" || mbox == "tmp") {
+                continue; // skip maildir directories
+            }
+
             untagged("LSUB (\\HasNoChildren) \"/\" \"" + mbox + "\"");
         }
 
