@@ -578,6 +578,10 @@ void IMAPSession::ensure_standard_folders() {
 
 void IMAPSession::cmd_list(const std::string& tag, const std::string& /* args */) {
     untagged("LIST (\\HasNoChildren) \"/\" \"INBOX\"");
+    untagged("LIST (\\HasNoChildren \\Sent) \"/\" \"Sent\"");
+    untagged("LIST (\\HasNoChildren \\Drafts) \"/\" \"Drafts\"");
+    untagged("LIST (\\HasNoChildren \\Junk) \"/\" \"Junk\"");
+    untagged("LIST (\\HasNoChildren \\Trash) \"/\" \"Trash\"");
     
     std::string user_root = mail_root_ + "/" + username_;
     DIR* d = ::opendir(user_root.c_str());
@@ -591,8 +595,12 @@ void IMAPSession::cmd_list(const std::string& tag, const std::string& /* args */
             }
 
             std::string mbox = name.substr(1);
-            if (mbox == "cur" || mbox == "new" || mbox == "tmp") {
-                continue;
+            if (
+                mbox == "cur" || mbox == "new" || mbox == "tmp"
+                || mbox == "Sent" || mbox == "Drafts" 
+                || mbox == "Junk" || mbox == "Trash"
+            ) {
+                continue; // skip maildir directories
             }
 
             untagged("LIST (\\HasNoChildren) \"/\" \"" + mbox + "\"");
@@ -607,6 +615,10 @@ void IMAPSession::cmd_list(const std::string& tag, const std::string& /* args */
 void IMAPSession::cmd_lsub(const std::string& tag, const std::string& /* args */) {
     // Beta will introduce subscribed folders, for now this mirrors LIST
     untagged("LSUB (\\HasNoChildren) \"/\" \"INBOX\"");
+    untagged("LSUB (\\HasNoChildren \\Sent) \"/\" \"Sent\"");
+    untagged("LSUB (\\HasNoChildren \\Drafts) \"/\" \"Drafts\"");
+    untagged("LSUB (\\HasNoChildren \\Junk) \"/\" \"Junk\"");
+    untagged("LSUB (\\HasNoChildren \\Trash) \"/\" \"Trash\"");
 
     std::string user_root = mail_root_ + "/" + username_;
     DIR* d = ::opendir(user_root.c_str());
@@ -621,7 +633,11 @@ void IMAPSession::cmd_lsub(const std::string& tag, const std::string& /* args */
 
             std::string mbox = name.substr(1);
 
-            if (mbox == "cur" || mbox == "new" || mbox == "tmp") {
+            if (
+                mbox == "cur" || mbox == "new" || mbox == "tmp"
+                || mbox == "Sent" || mbox == "Drafts" 
+                || mbox == "Junk" || mbox == "Trash"
+            ) {
                 continue; // skip maildir directories
             }
 
