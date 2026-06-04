@@ -374,6 +374,8 @@ void IMAPSession::complete_append() {
     std::ofstream out(path, std::ios::binary);
 
     if (!out) {
+        std::cerr << "[IMAP] APPEND open failed: " << std::strerror(errno) << " path=" << path << std::endl;
+
         no(append_tag_, "APPEND failed: could not write message");
         return;
     }
