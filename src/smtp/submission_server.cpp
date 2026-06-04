@@ -318,7 +318,7 @@ bool SubmissionServer::deliver() {
                 all_ok = false;
             }
         } else {
-            if (!relay_outbound(env_.mail_from, rcpt, local, env_.body)) {
+            if (!relay_outbound(env_.mail_from, rcpt, domain, env_.body)) {
                 std::cerr << "[deliver] relay failed for " << rcpt << std::endl;
                 all_ok = false;
             }
@@ -534,7 +534,7 @@ bool SubmissionServer::relay_outbound(
         }
 
         send_line(".");
-        if (!expect(25)) {
+        if (!expect(250)) {
             ok = false;
         }
     }
