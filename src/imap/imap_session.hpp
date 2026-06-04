@@ -110,7 +110,7 @@ class IMAPSession : public Session {
         
         void cmd_close(const std::string& tag);
 
-        void IMAPSession::ensure_mailbox_dirs(const std::string& mailbox);
+        void ensure_mailbox_dirs(const std::string& mailbox);
 
         std::vector<uint32_t> parse_sequence_set(const std::string& set) const;
 
