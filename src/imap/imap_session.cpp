@@ -670,11 +670,11 @@ std::string IMAPSession::fetch_message(
     };
 
     if (upper.find("FLAGS") != std::string::npos) {
-        add("FLAGS " + msg.flags + ")");
+        add("FLAGS " + msg.flags);
     }
 
     if (upper.find("UID") != std::string::npos) {
-        add("UID " + std::to_string(msg.uuid) + ")");
+        add("UID " + std::to_string(msg.uuid));
     }
 
     if (upper.find("RFC822.SIZE") != std::string::npos) {
