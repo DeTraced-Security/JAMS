@@ -829,6 +829,47 @@ void IMAPSession::cmd_store(const std::string& tag, const std::string& args) {
             }
         }
 
+        // Persist flags to disk
+        {
+            auto flag_chars = [](const std::string& flags) {
+                std::string s;
+                if (flags.find("\\Seen") != std::string::npos) {
+                    s += 'S';
+                }
+                if (flags.find("\\Answered") != std::string::npos) {
+                    s += 'R';
+                }
+                if (flags.find("\\Flagged") != std::string::npos) {
+                    s += 'F';
+                }
+                if (flags.find("\\Deleted") != std::string::npos) {
+                    s += 'T';
+                }
+                if (flags.find("\\Draft") != std::string::npos) {
+                    s += 'D';
+                }
+
+                return s;
+            };
+
+            std::string base = itr->filename;
+            auto colon = base.find(":2,");
+            if (colon != std::string::npos) {
+                base = base.substr(0, colon);
+            }
+
+            std::string new_name = base + ":2," + flag_chars(itr->flags);
+            if (new_name != itr->filename) {
+                std::string dir = itr->in_cur ? "/cur/" : "/new/";
+                std::string old_path = mail_root_ + "/" + username_ + dir + itr->filename;
+                std::string new_path = mail_root_ + "/" + username_ + dir + new_name;
+
+                if (::rename(old_path.c_str(), new_path.c_str()) == 0) {
+                    itr->filename = new_name;
+                }
+            }
+        }
+
         // Send FETCH unless .SILENT is present
         if (upper.find(".SILENT") == std::string::npos) {
             untagged(std::to_string(seq) + " FETCH (FLAGS (" + itr->flags + "))");
