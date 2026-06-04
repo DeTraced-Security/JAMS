@@ -374,6 +374,8 @@ void IMAPSession::cmd_create(const std::string& tag, const std::string& args) {
     ok(tag, "CREATE completed");
 }
 
+std::atomic<uint32_t> IMAPSession::append_seq_{0};
+
 void IMAPSession::complete_append() {
     auto now = std::chrono::system_clock::now();
     auto secs = std::chrono::duration_cast<std::chrono::seconds>(
