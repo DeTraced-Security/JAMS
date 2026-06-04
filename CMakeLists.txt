@@ -75,4 +75,5 @@ target_link_libraries(mailserver PRIVATE
     OpenSSL::Crypto
     ${SQLite3_LIBRARIES}
     crypt
+    resolv
 )

@@ -272,7 +272,7 @@ void IMAPSession::cmd_starttls(const std::string& tag) {
     loop_.upgrade_tls(conn_id_);
 }
 
-void IMAPSession::cmd_uid_search(const std::string& tag, const std::string& args) {
+void IMAPSession::cmd_uid_search(const std::string& tag, const std::string& /* args */) {
     untagged("SEARCH");
     // Stub, will implement search in beta
     ok(tag, "UID SEARCH completed");
@@ -670,7 +670,7 @@ std::string IMAPSession::fetch_message(
     };
 
     if (upper.find("FLAGS") != std::string::npos) {
-        add("FLAGS " + msg.flags);
+        add("FLAGS (" + msg.flags + ")");
     }
 
     if (upper.find("UID") != std::string::npos) {
