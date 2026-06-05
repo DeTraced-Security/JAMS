@@ -1,25 +1,25 @@
-> [!info] Project Status:
-> JAMS - v0.0.1-alpha | Experimental
-> Repository: [DeTraced-Security/JAMS](https://github.com/DeTraced-Security/JAMS)
-> Security Contact: [detraced-sec@proton.me](mailto:detraced-sec@proton.me)
+> [!NOTE]
+> JAMS - v0.0.1-alpha | Experimental  
+> Repository: [DeTraced-Security/JAMS](https://github.com/DeTraced-Security/JAMS)  
+> Security Contact: [detraced-sec@proton.me](mailto:detraced-sec@proton.me)  
 
 ---
 # Table of Contents
-- [[#Overview]]
-- [[#Architecture]]
-- [[#Prerequisites]]
-- [[#Building from Source]]
-- [[#Initial Setup]]
-- [[#Running the Server]]
-- [[#Configuration]]
-- [[#Protocol Support]]
-- [[#Authentication]]
-- [[#Email Validation (DKIM · SPF · DMARC)]]
-- [[#TLS & Encryption]]
-- [[#Storage]]
-- [[#Security Notes]]
-- [[#Feature Roadmap]]
-- [[#Contributing & Bug Reports]]
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [Prerequisites](#prerequisites)
+- [Building from Source](#building-from-source)
+- [Initial Setup](#initial-setup)
+- [Running the Server](#running-the-server)
+- [Configuration](#configuration)
+- [Protocol Support](#protocol-support)
+- [Authentication](#authentication)
+- [Email Validation (DKIM/SPF/DMARC)](#email-validation-dkimspfdmarc)
+- [TLS & Encryption](#tls--encryption)
+- [Storage](#storage)
+- [Security Notes](#security-notes)
+- [Feature Roadmap](#feature-roadmap)
+- [Contributing & Bug Reports](#contributing--bug-reports)
 
 ---
 # Overview
@@ -176,10 +176,11 @@ CREATE TABLE users (
 	created_at TEXT NOT NULL
 );
 ```
-> [!warning]
-> Never insert plaintext passwords. Passwords must be stored as PBKDF2-HMAC-SHA256 (100,000 iterations). A user-management CLI is planned, until then use the `CredentialStore` API in the `main.cpp`
-> 
+> [!WARNING]
+> Never insert plaintext passwords. Passwords must be stored as PBKDF2-HMAC-SHA256 (100,000 iterations). A user-management CLI is planned, until then use the `CredentialStore` API in the `main.cpp`  
+>  
 > You can do so with the following after the CredentialStore initialisation:
+
 ```cpp
 const bool user_create = cred_store.add_user("username", "password");
 if (!user_create) {
@@ -242,7 +243,8 @@ Currently, `config/server.toml` is reserved for future use. All parameters are s
 | Outbound (Submission) Port | 587                      | `src/main.cpp`              |
 | Max Message Size           | 50MB                     | `src/smtp/smtp_session.cpp` |
 | Max Recipients             | 100                      | `src/smtp/smtp_session.cpp` |
-> [!note]
+
+> [!NOTE]
 > Full `server.toml` parsing is planned for a future release. Until then, changes to the above constants require a full recompile.
 
 ---
@@ -303,7 +305,8 @@ Supported on ESMTP (Submission) Outbound (587) and IMAP4:
 | PLAIN     | RFC-4616 | Requires Active TLS Session |
 | LOGIN     | RFC-4954 | Challenge-Response Variant  |
 Maximum authentication attempts before disconnect: 3
-> [!warning]
+
+> [!WARNING]
 > `AUTH` on port 587 requires an active `STARTTLS` session. Credentials will never be transmitted in plaintext.
 
 ---
@@ -330,7 +333,8 @@ Evaluates alignment between the `FROM:` domain and SPF/DKIM results.
 | Policies  | `none`, `quarantine`, `reject`               |
 | Alignment | `relaxed` (default) or `strict` for SPF/DKIM |
 | Sampling  | `pct=` field partially implemented           |
-> [!warning] Current Limitation
+
+> [!WARNING]
 > Parsing and verification are complete. Policy enforcement is not yet wired together into the delivery pipeline
 
 ---
@@ -378,7 +382,8 @@ Message filenames are encoded with a UNIX timestamp (unique), byte size, and IMA
 
 --- 
 # Security Notes
-> [!danger] Known Limitations in Current Experimental Release
+> [!CAUTION]
+> Known Limitations in Current Experimental Release
 
 | Issue                                            | Risk                                                   | Roadmap Status                 |
 | ------------------------------------------------ | ------------------------------------------------------ | ------------------------------ |
