@@ -4,6 +4,12 @@
 #include <cctype>
 #include <iostream>
 #include <sstream>
+#include <resolv.h>
+#include <netinet/in.h>
+#include <arpa/nameser.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <sstream>
 
 SubmissionServer::SubmissionServer(
     uint64_t conn_id, const std::string& remote_ip,
@@ -297,20 +303,256 @@ void SubmissionServer::cmd_quit() {
 bool SubmissionServer::deliver() {
     // TODO: Encrypt before writing
     bool all_ok = true;
-    
+    const std::string local_domain = "mail.detraced.org";
+
     for (const auto& rcpt : env_.rcpt_to) {
         // Extract local/account name (before @)
         auto at = rcpt.find('@');
+        std::string domain = (at != std::string::npos) ? rcpt.substr(at + 1) : "";
         std::string local = (at != std::string::npos) ? rcpt.substr(0, at) : rcpt;
 
-        MailDir mdir("/var/mail/vhosts/" + local);
-        if (!mdir.deliver(env_.mail_from, rcpt, env_.body)) {
-            std::cerr << "[deliver] failed for " << rcpt << std::endl;
-            all_ok = false;
+        if (domain.empty() || domain == "mail.detraced.org") {
+            MailDir mdir("/var/mail/vhosts/" + local);
+            if (!mdir.deliver(env_.mail_from, rcpt, env_.body)) {
+                std::cerr << "[deliver] failed for " << rcpt << std::endl;
+                all_ok = false;
+            }
+        } else {
+            if (!relay_outbound(env_.mail_from, rcpt, domain, env_.body)) {
+                std::cerr << "[deliver] relay failed for " << rcpt << std::endl;
+                all_ok = false;
+            }
         }
     }
 
     return all_ok;
+}
+
+bool SubmissionServer::relay_outbound(
+    const std::string& from, const std::string& to,
+    const std::string& domain, const std::string& body
+) {
+    // MX lookup
+    unsigned char answer[4096];
+    int len = res_query(domain.c_str(), C_IN, T_MX, answer, sizeof(answer));
+
+    if (len < 0) {
+        std::cerr << "[relay] MX lookup failed for: " << domain << std::endl;
+        return false;
+    }
+
+    HEADER* header = reinterpret_cast<HEADER*>(answer);
+    unsigned char* ptr = answer + sizeof(HEADER);
+    unsigned char* end = answer + len;
+
+    // skip question
+    int qdcount = ntohs(header->qdcount);
+    for (int i = 0; i < qdcount; i++) {
+        while (ptr < end && *ptr != 0) {
+            if ((*ptr & 0xC0) == 0xC0) {
+                ptr += 2;
+                break;
+            }
+            ptr += *ptr + 1;
+        }
+        
+        if (ptr < end && *ptr == 0) {
+            ptr++;
+        }
+
+        ptr += 4;
+    }
+
+    int ancount = ntohs(header->ancount);
+    std::string mx_host;
+    uint16_t mx_prio = 65535;
+
+    for (int i = 0; i < ancount; i++) {
+        // skip name
+        while (ptr < end) {
+            if ((*ptr & 0xC0) == 0xC0) {
+                ptr += 2;
+                break;
+            }
+
+            if (*ptr == 0) {
+                ptr++;
+                break;
+            }
+
+            ptr += *ptr + 1;
+        }
+
+        if (ptr + 10 > end) {
+            break;
+        }
+
+        uint16_t type;
+        memcpy(&type, ptr, 2);
+        type = ntohs(type);
+        ptr += 2;
+        ptr += 2; // class
+        ptr += 4; // ttl
+
+        uint16_t rdlen;
+        memcpy(&rdlen, ptr, 2);
+        rdlen = ntohs(rdlen);
+        ptr += 2;
+
+        unsigned char* rdata_end = ptr + rdlen;
+
+        if (type == T_MX && ptr + 2 <= end) {
+            uint16_t prio;
+            memcpy(&prio, ptr, 2);
+            prio = ntohs(prio);
+            ptr += 2;
+
+            char host[256] = {};
+            dn_expand(answer, end, ptr, host, sizeof(host));
+
+            if (prio < mx_prio) {
+                mx_prio = prio;
+                mx_host = host;
+            }
+        }
+
+        ptr = rdata_end;
+    }
+
+    if (mx_host.empty()) {
+        mx_host = domain;
+    }
+
+    std::cerr << "[relay] MX for " << domain << " -> " << mx_host << " (prio=" << mx_prio << ")" << std::endl;
+
+    struct addrinfo hints{}, *res = nullptr;
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+
+    if (getaddrinfo(mx_host.c_str(), "25", &hints, &res) != 0 || !res) {
+        std::cerr << "[relay] getaddrinfo failed for " << mx_host << std::endl;
+        return false;
+    }
+
+    int sock = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (sock < 0) {
+        freeaddrinfo(res);
+        return false;
+    }
+
+    // 30 second timeout
+    struct timeval tv{ .tv_sec = 30, .tv_usec = 0 };
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+
+    if (::connect(sock, res->ai_addr, res->ai_addrlen) != 0) {
+        std::cerr << "[relay] connect failed to " << mx_host << ": " << strerror(errno) << std::endl;
+        ::close(sock);
+        freeaddrinfo(res);
+        return false;
+    }
+
+    freeaddrinfo(res);
+
+    // SMTP Exchange
+    auto recv_line = [&]() -> std::string {
+        std::string line;
+        char c;
+
+        while (::recv(sock, &c, 1, 0) == 1) {
+            line += c;
+            if (line.size() >= 2 && line[line.size() - 2] == '\r' && line.back() == '\n') {
+                break;
+            }
+        }
+        
+        std::cerr << "[relay << " << line;
+        return line;
+    };
+
+    auto send_line = [&](const std::string& line) {
+        std::cerr << "[relay] >> " << line;
+        std::string out = line + "\r\n";
+        ::send(sock, out.c_str(), out.size(), 0);
+    };
+
+    auto expect = [&](int code) -> bool {
+        // read until non-continuatin
+        std::string last;
+        while (true) {
+            last = recv_line();
+            if (last.size() >= 4 && last[3] == ' ') {
+                break;
+            }
+            if (last.size() < 4) {
+                break;
+            }
+        }
+
+        return last.size() >= 3 && std::stoi(last.substr(0, 3)) == code;
+    };
+
+    bool ok = true;
+
+    if (!expect(220)) {
+        ::close(sock);
+        return false;
+    }
+
+    send_line("EHLO mail.detraced.org");
+    if (!expect(250)) {
+        send_line("HELO mail.detraced.org");
+        if (!expect(250)) {
+            ::close(sock);
+            return false;
+        }
+    }
+
+    send_line("MAIL FROM:<" + from + ">");
+    if (!expect(250)) {
+        ok = false;
+    }
+
+    if (ok) {
+        send_line("RCPT TO:<" + to + ">");
+        if (!expect(250)) {
+            ok = false;
+        }
+    }
+
+    if (ok) {
+        send_line("DATA");
+        if (!expect(354)) {
+            ok = false;
+        }
+    }
+
+    if (ok) {
+        std::istringstream ss(body);
+        std::string line;
+        while (std::getline(ss, line)) {
+            if (!line.empty() && line.front() == '.') {
+                line = "." + line;
+            }
+            if (!line.empty() && line.back() == '\r') {
+                line.pop_back();
+            }
+
+            send_line(line);
+        }
+
+        send_line(".");
+        if (!expect(250)) {
+            ok = false;
+        }
+    }
+
+    send_line("QUIT");
+    expect(221);
+    ::close(sock);
+
+    std::cerr << "[relay] delivery to " << to << (ok ? " succeeded" : "failed") << std::endl;
+    return ok;
 }
 
 void SubmissionServer::reply(int code, std::string_view text) {
