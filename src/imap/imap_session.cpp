@@ -22,7 +22,25 @@ IMAPSession::IMAPSession(
     }
 
 void IMAPSession::on_data(std::span<const uint8_t> bytes) {
-    for (uint8_t b : bytes) {
+    size_t offset = 0;
+
+    // Fast-path: drain literal bypes for an in-progress APPEND
+    if (literal_pending_ && literal_remaining_ > 0) {
+        size_t take = std::min(bytes.size(), literal_remaining_);
+        literal_buf_.insert(literal_buf_.end(), bytes.begin(), bytes.begin() + take);
+        
+        literal_remaining_ -= take;
+        offset = take;
+
+        if (literal_remaining_ == 0) {
+            literal_pending_ = false;
+            complete_append();
+        }
+    }
+
+
+    for (size_t i = offset; i < bytes.size(); ++i) {
+        uint8_t b = bytes[i];
         if (b == '\n') {
             if (!line_buf_.empty() && line_buf_.back() == '\r') {
                 line_buf_.pop_back();
@@ -30,6 +48,23 @@ void IMAPSession::on_data(std::span<const uint8_t> bytes) {
 
             process_line(line_buf_);
             line_buf_.clear();
+
+            // Drain any literal bytes that arrived in the same call
+            if (literal_pending_ && literal_remaining_ > 0) {
+                size_t avail = bytes.size() - (i + 1);
+                size_t take  = std::min(avail, literal_remaining_);
+                auto   start = bytes.begin() + i + 1;
+
+                literal_buf_.insert(literal_buf_.end(), start, start + take);
+                literal_remaining_ -= take;
+                i += take;
+
+                if (literal_remaining_ == 0) {
+                    literal_pending_ = false;
+                    complete_append();
+                }
+            }
+
         } else {
             line_buf_ += static_cast<char>(b);
 
@@ -113,6 +148,7 @@ void IMAPSession::process_line(const std::string& line) {
 
         if (command == "EXAMINE") {
             cmd_select(tag, args, true);
+            return;
         }
 
         if (command == "LIST") {
@@ -127,6 +163,52 @@ void IMAPSession::process_line(const std::string& line) {
 
         if (command == "STATUS") {
             cmd_status(tag, args);
+            return;
+        }
+
+        if (command == "APPEND") {
+            cmd_append(tag, args);
+            return;
+        }
+
+        if (command == "CREATE") {
+            cmd_create(tag, args);
+            return;
+        }
+
+        if (command == "SUBSCRIBE" || command == "UNSUBSCRIBE") {
+            // stub until Subscribe is implemented (beta)
+            ok(tag, command + " completed");
+            return;
+        }
+
+        if (command == "UID") {
+            std::istringstream uid_ss(args);
+            std::string uid_cmd;
+            std::string uid_args;
+            uid_ss >> uid_cmd;
+            std::getline(uid_ss, uid_args);
+
+            if (!uid_args.empty() && uid_args.front() == ' ') {
+                uid_args.erase(0, 1);
+            }
+
+            std::transform(uid_cmd.begin(), uid_cmd.end(), uid_cmd.begin(), ::toupper);
+
+            if (uid_cmd == "FETCH") {
+                cmd_fetch(tag, uid_args);
+                return;
+            }
+            if (uid_cmd == "SEARCH") {
+                cmd_uid_search(tag, uid_args);
+                return;
+            }
+            if (uid_cmd == "STORE") {
+                cmd_store(tag, uid_args);
+                return;
+            }
+
+            bad(tag, "Unknown UID command");
             return;
         }
     }
@@ -190,6 +272,217 @@ void IMAPSession::cmd_starttls(const std::string& tag) {
     loop_.upgrade_tls(conn_id_);
 }
 
+void IMAPSession::cmd_uid_search(const std::string& tag, const std::string& args) {
+    std::string upper = args;
+    std::transform(upper.begin(), upper.end(), upper.begin(), ::toupper);
+
+    std::vector<uint32_t> results;
+    auto since_pos = upper.find("SINCE ");
+
+    if (since_pos != std::string::npos) {
+        std::string date_str = args.substr(since_pos + 6);
+        while (!date_str.empty() && std::isspace(date_str.front())) {
+            date_str.erase(0, 1);
+        }
+        while(!date_str.empty() && std::isspace(date_str.back())) {
+            date_str.pop_back();
+        }
+
+        struct tm tm{};
+        if (strptime(date_str.c_str(), "%d-%b-%Y", &tm)) {
+            tm.tm_hour = 0;
+            tm.tm_sec = 0;
+            tm.tm_isdst = -1;
+            time_t since_t = mktime(&tm);
+
+            for (const auto& msg : messages_) {
+                if (static_cast<time_t>(msg.uuid) >= since_t) {
+                    results.push_back(msg.uuid);
+                }
+            }
+        }
+    } else {
+        for (const auto& msg : messages_) {
+            results.push_back(msg.uuid);
+        }
+    }
+
+    std::string response = "SEARCH";
+    for (uint32_t uid : results) {
+        response += " " + std::to_string(uid);
+    }
+
+    untagged(response);
+    ok(tag, "UID SEARCH completed");
+}
+
+void IMAPSession::cmd_append(const std::string& tag, const std::string& args) {
+    std::string rest = args;
+    std::string mbox = "";
+
+    if (!rest.empty() && rest.front() == '"') {
+        auto close = rest.find('"', 1);
+        if (close == std::string::npos) {
+            bad(tag, "Unterminated mailbox name");
+            return;
+        }
+
+        mbox = rest.substr(1, close - 1);
+        rest = rest.substr(close + 1);
+    } else {
+        auto sp = rest.find(' ');
+        mbox = (sp == std::string::npos) ? rest : rest.substr(0, sp);
+        rest = (sp == std::string::npos) ? "" : rest.substr(sp);
+    }
+
+    if (mbox.empty()) {
+        bad(tag, "APPEND requires a mailbox name");
+        return;
+    }
+
+    // Skip optional flags
+    std::string flags;
+    auto trim_ws = [](const std::string& ws) {
+        size_t a = ws.find_first_not_of(' ');
+        return (a == std::string::npos) ? "" : ws.substr(a);
+    };
+    rest = trim_ws(rest);
+
+    if (!rest.empty() && rest.front() == '(') {
+        auto close = rest.find(')');
+        if (close != std::string::npos) {
+            flags = rest.substr(1, close - 1);
+            rest = trim_ws(rest.substr(close + 1));
+        }
+    }
+
+    // Skip optional date-time
+    if (!rest.empty() && rest.front() == '"') {
+        auto close = rest.find('"', 1);
+        if (close != std::string::npos) {
+            rest = trim_ws(rest.substr(close + 1));
+        }
+    }
+
+    // Must end in {size}
+    if (rest.empty() || rest.front() != '{' || rest.back() != '}') {
+        bad(tag, "APPEND literal size missing");
+        return;
+    }
+
+    size_t sz = 0;
+    auto inner = rest.substr(1, rest.size() - 2);
+
+    if (!inner.empty() && inner.back() == '+') {
+        inner.pop_back();
+    }
+
+    auto [ptr, ec] = std::from_chars(inner.data(), inner.data() + inner.size(), sz);
+    if (ec != std::errc{}) {
+        bad(tag, "Bad literal size");
+        return;
+    }
+
+    ensure_mailbox_dirs(mbox);   
+
+    // Arm literal reader
+    append_tag_ = tag;
+    append_mailbox_ = mbox;
+    append_flags_ = flags;
+    literal_buf_.clear();
+    literal_buf_.reserve(sz);
+    literal_remaining_ = sz;
+    literal_pending_ = true;
+
+    send("+ Ready for literal data");
+}
+
+void IMAPSession::cmd_create(const std::string& tag, const std::string& args) {
+    std::string mbox = args;
+    if (mbox.size() >= 2 && mbox.front() == '"' && mbox.back() == '"') {
+        mbox = mbox.substr(1, mbox.size() - 2);
+    }
+
+    if (mbox.empty() || mbox == "INBOX") {
+        no(tag, "Cannot create that mailbox");
+        return;
+    }
+
+    ensure_mailbox_dirs(mbox);
+    ok(tag, "CREATE completed");
+}
+
+std::atomic<uint32_t> IMAPSession::append_seq_{0};
+
+void IMAPSession::complete_append() {
+    auto now = std::chrono::system_clock::now();
+    auto secs = std::chrono::duration_cast<std::chrono::seconds>(
+        now.time_since_epoch()
+    ).count();
+    std::string fname = std::to_string(secs) 
+        + "." + std::to_string(::getpid()) + "." + std::to_string(append_seq_++)
+        + ".jams_append";
+
+    // Map flags to suffix characters
+    std::string flag_chars;
+    if (append_flags_.find("\\Seen") != std::string::npos) {
+        flag_chars += 'S';
+    }
+    if (append_flags_.find("\\Answered") != std::string::npos) {
+        flag_chars += 'R';
+    }
+    if (append_flags_.find("\\Flagged") != std::string::npos) {
+        flag_chars += 'F';
+    }
+    if (append_flags_.find("\\Deleted") != std::string::npos) {
+        flag_chars += 'T';
+    }
+    if (append_flags_.find("\\Draft") != std::string::npos) {
+        flag_chars += 'D';
+    }
+
+    fname += ":2," + flag_chars;
+
+    std::string base = mail_root_ + "/" + username_;
+    if (append_mailbox_ != "INBOX") {
+        base += "/." + append_mailbox_;
+    }
+
+    std::string path = base + "/cur/" + fname;
+    std::ofstream out(path, std::ios::binary);
+
+    if (!out) {
+        std::cerr << "[IMAP] APPEND open failed: " << std::strerror(errno) << " path=" << path << std::endl;
+
+        no(append_tag_, "APPEND failed: could not write message");
+        return;
+    }
+
+    out.write(
+        reinterpret_cast<const char*>(literal_buf_.data()),
+        static_cast<std::streamsize>(literal_buf_.size())
+    );
+    out.close();
+
+    std::cout << "[IMAP] " << conn_id_ << " appended " 
+        << literal_buf_.size() << " bytes to " 
+        << append_mailbox_ << std::endl;
+
+    ok(append_tag_, "APPEND completed");
+}
+
+void IMAPSession::ensure_mailbox_dirs(const std::string& mailbox) {
+    std::string base = mail_root_ + "/" + username_;
+    if (mailbox != "INBOX") {
+        base += "/." + mailbox;
+    }
+
+    for (const char* sub : {"cur", "new", "tmp"}) {
+        std::string dir = base + "/" + sub;
+        ::mkdir(dir.c_str(), 0700); // no-op if already exists
+    }
+}
+
 void IMAPSession::cmd_login(const std::string& tag, const std::string& args) {
     std::istringstream ss(args);
     std::string user, pass;
@@ -226,6 +519,7 @@ void IMAPSession::cmd_login(const std::string& tag, const std::string& args) {
 
     username_ = user;
     state_ = State::Authenticated;
+    ensure_standard_folders();
     
     std::cout << "[IMAP] " << conn_id_ << " authenticated: " << username_ << std::endl;
 
@@ -276,16 +570,83 @@ void IMAPSession::cmd_select(
     }
 }
 
+void IMAPSession::ensure_standard_folders() {
+    for (const char* folder : {"Sent", "Drafts", "Junk", "Trash"}) {
+        ensure_mailbox_dirs(folder);
+    }
+}
 
 void IMAPSession::cmd_list(const std::string& tag, const std::string& /* args */) {
-    // Minimal LIST, beta will extend off this
     untagged("LIST (\\HasNoChildren) \"/\" \"INBOX\"");
-    ok(tag, "LIST completed");   
+    untagged("LIST (\\HasNoChildren \\Sent) \"/\" \"Sent\"");
+    untagged("LIST (\\HasNoChildren \\Drafts) \"/\" \"Drafts\"");
+    untagged("LIST (\\HasNoChildren \\Junk) \"/\" \"Junk\"");
+    untagged("LIST (\\HasNoChildren \\Trash) \"/\" \"Trash\"");
+    
+    std::string user_root = mail_root_ + "/" + username_;
+    DIR* d = ::opendir(user_root.c_str());
+
+    if (d) {
+        struct dirent* ent;
+        while ((ent = ::readdir(d)) != nullptr) {
+            std::string name = ent->d_name;
+            if (name.size() < 2 || name[0] != '.' || name[1] == '.') {
+                continue; // Maildir subfolders start with '.'
+            }
+
+            std::string mbox = name.substr(1);
+            if (
+                mbox == "cur" || mbox == "new" || mbox == "tmp"
+                || mbox == "Sent" || mbox == "Drafts" 
+                || mbox == "Junk" || mbox == "Trash"
+            ) {
+                continue; // skip maildir directories
+            }
+
+            untagged("LIST (\\HasNoChildren) \"/\" \"" + mbox + "\"");
+        }
+
+        ::closedir(d);
+    }
+
+    ok(tag, "LIST completed");
 }
 
 void IMAPSession::cmd_lsub(const std::string& tag, const std::string& /* args */) {
-    // Likewise with cmd_list, beta will extend this
-    untagged("LSUB () \"/\" \"INBOX\"");
+    // Beta will introduce subscribed folders, for now this mirrors LIST
+    untagged("LSUB (\\HasNoChildren) \"/\" \"INBOX\"");
+    untagged("LSUB (\\HasNoChildren \\Sent) \"/\" \"Sent\"");
+    untagged("LSUB (\\HasNoChildren \\Drafts) \"/\" \"Drafts\"");
+    untagged("LSUB (\\HasNoChildren \\Junk) \"/\" \"Junk\"");
+    untagged("LSUB (\\HasNoChildren \\Trash) \"/\" \"Trash\"");
+
+    std::string user_root = mail_root_ + "/" + username_;
+    DIR* d = ::opendir(user_root.c_str());
+
+    if (d) {
+        struct dirent* ent;
+        while ((ent = ::readdir(d)) != nullptr) {
+            std::string name = ent->d_name;
+            if (name.size() < 2 || name[0] != '.' || name[1] == '.') {
+                continue; // Maildir subfolders start with '.'
+            }
+
+            std::string mbox = name.substr(1);
+
+            if (
+                mbox == "cur" || mbox == "new" || mbox == "tmp"
+                || mbox == "Sent" || mbox == "Drafts" 
+                || mbox == "Junk" || mbox == "Trash"
+            ) {
+                continue; // skip maildir directories
+            }
+
+            untagged("LSUB (\\HasNoChildren) \"/\" \"" + mbox + "\"");
+        }
+
+        ::closedir(d);
+    }
+
     ok(tag, "LSUB completed");
 }
 
@@ -378,11 +739,11 @@ std::string IMAPSession::fetch_message(
     };
 
     if (upper.find("FLAGS") != std::string::npos) {
-        add("FLAGS " + msg.flags + ")");
+        add("FLAGS (" + msg.flags + ")");
     }
 
     if (upper.find("UID") != std::string::npos) {
-        add("UID " + std::to_string(msg.uuid) + ")");
+        add("UID " + std::to_string(msg.uuid));
     }
 
     if (upper.find("RFC822.SIZE") != std::string::npos) {
@@ -403,9 +764,19 @@ std::string IMAPSession::fetch_message(
     ) {
         auto blob = read_blob(msg);
         add(
-            "BODY{} {" + std::to_string(blob.size()) + "}\r\n" + 
+            "BODY[] {" + std::to_string(blob.size()) + "}\r\n" + 
             std::string(blob.begin(), blob.end())
         );
+    }
+
+    if (upper.find("INTERNALDATE") != std::string::npos) {
+        // Format: "04-Jun-2026 09:49:10 +0000"
+        time_t t = static_cast<time_t>(msg.uuid);
+        struct tm tm{};
+        gmtime_r(&t, &tm);
+        char buf[64];
+        strftime(buf, sizeof(buf), "\"%d-%b-%Y %H:%M:%S +0000\"", &tm);
+        add(std::string("INTERNALDATE ") + buf);
     }
 
     result += ')';
@@ -489,6 +860,47 @@ void IMAPSession::cmd_store(const std::string& tag, const std::string& args) {
             }
         }
 
+        // Persist flags to disk
+        {
+            auto flag_chars = [](const std::string& flags) {
+                std::string s;
+                if (flags.find("\\Seen") != std::string::npos) {
+                    s += 'S';
+                }
+                if (flags.find("\\Answered") != std::string::npos) {
+                    s += 'R';
+                }
+                if (flags.find("\\Flagged") != std::string::npos) {
+                    s += 'F';
+                }
+                if (flags.find("\\Deleted") != std::string::npos) {
+                    s += 'T';
+                }
+                if (flags.find("\\Draft") != std::string::npos) {
+                    s += 'D';
+                }
+
+                return s;
+            };
+
+            std::string base = itr->filename;
+            auto colon = base.find(":2,");
+            if (colon != std::string::npos) {
+                base = base.substr(0, colon);
+            }
+
+            std::string new_name = base + ":2," + flag_chars(itr->flags);
+            if (new_name != itr->filename) {
+                std::string dir = itr->in_cur ? "/cur/" : "/new/";
+                std::string old_path = mail_root_ + "/" + username_ + dir + itr->filename;
+                std::string new_path = mail_root_ + "/" + username_ + dir + new_name;
+
+                if (::rename(old_path.c_str(), new_path.c_str()) == 0) {
+                    itr->filename = new_name;
+                }
+            }
+        }
+
         // Send FETCH unless .SILENT is present
         if (upper.find(".SILENT") == std::string::npos) {
             untagged(std::to_string(seq) + " FETCH (FLAGS (" + itr->flags + "))");
@@ -513,7 +925,7 @@ void IMAPSession::cmd_expunge(const std::string& tag) {
         if (msg.flags.find("\\Deleted") != std::string::npos) {
             // Delete the file!
             std::string dir = msg.in_cur ? "/cur/" : "/new/";
-            std::string path = mail_root_ + username_ + dir + msg.filename;
+            std::string path = mail_root_+  "/" + username_ + dir + msg.filename;
 
             ::unlink(path.c_str());
             untagged(std::to_string(seq) + " EXPUNGE");

@@ -51,7 +51,12 @@ class SubmissionServer : public Session {
         }
     
     private:
-     /// @brief Processes commands received from on-wire data
+        bool relay_outbound(
+            const std::string& from, const std::string& to,
+            const std::string& domain, const std::string& body
+        );
+
+        /// @brief Processes commands received from on-wire data
         /// @param line 
         void process_line(std::string_view line);
 
