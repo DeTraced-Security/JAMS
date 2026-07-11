@@ -3,6 +3,8 @@
 #include "smtp/smtp_session.hpp"
 #include "smtp/submission_server.hpp"
 #include "imap/imap_session.hpp"
+#include "config/toml_parse.hpp"
+#include "globals.hpp"
 #include <csignal>
 #include <cstring>
 #include <stdexcept>
@@ -12,7 +14,7 @@
 
 // build info
 static constexpr const char* JAMS_VERSION = "0.0.1-alpha";
-static constexpr const char* JAMS_HOSTNAME = "mail.detraced.org";
+static const std::string JAMS_HOSTNAME = get_hostname();
 
 // Signal handling
 volatile sig_atomic_t g_shutdown = 0;
@@ -30,10 +32,7 @@ static void handle_signal(int sig) {
 static void help(const char* prog) {
     std::cerr << "Usage: " << prog << " [options]"
         << "\n"
-        << "options:\n"
-        << "  --smtp-port  <port>   SMTP inbound port        (default: 25)\n"
-        << "  --db         <path>   path to user database    (default: /var/lib/jams/users.db)\n"
-        << "  --help                show this message\n"
+        << "Server Configuration are made via the `./config/server.toml` file"
         << "\n"
         << "notes:\n"
         << "  ports below 1024 require CAP_NET_BIND_SERVICE or root\n"
@@ -51,59 +50,30 @@ static void banner() {
 }
 
 struct Config {
-    uint16_t smtp_port{25};
-    uint16_t submission_port{587};
-    uint16_t imap4_secure_port{993};
-    uint16_t imap4_port{143};
-    std::string db_path{"/var/lib/jams/users.db"};
+    uint16_t smtp_port;
+    uint16_t submission_port;
+    uint16_t imap4_secure_port;
+    uint16_t imap4_port;
+    std::string db_path;
 };
 
-static bool parse_args(int argc, char* argv[], Config& cfg) {
-    for (int i = 1; i < argc; ++i) {
-        std::string arg = argv[i];
-
-        if (arg == "--help" || arg == "-h") {
-            return false;
-        }
-
-        auto next = [&]() -> std::string {
-            if (i + 1 >= argc) {
-                std::cerr << "[error] " << arg << " requires an argument\n";
-                return {};
-            }
-            return argv[++i];
-        };
- 
-        if (arg == "--smtp-port") {
-            auto val = next();
-            if (val.empty()) return false;
-            int p = std::atoi(val.c_str());
-            if (p <= 0 || p > 65535) {
-                std::cerr << "[error] invalid port: " << val << "\n";
-                return false;
-            }
-            cfg.smtp_port = static_cast<uint16_t>(p);
- 
-        } else if (arg == "--db") {
-            auto val = next();
-            if (val.empty()) return false;
-            cfg.db_path = val;
- 
-        } else {
-            std::cerr << "[error] unknown option: " << arg << "\n";
-            return false;
-        }
-    }
-
-    return true;
-}
 
 int main(int argc, char* argv[]) {
     Config cfg;
 
-    if (!parse_args(argc, argv, cfg)) {
-        help(argv[0]);
-        return 1;
+    for (auto& p : configs) {
+        if (p.first == "smtp") {
+            cfg.smtp_port = std::stoi(p.second);
+        }
+        if (p.first == "imap4") {
+            cfg.imap4_port = std::stoi(p.second);
+        }
+        if (p.first == "imap4s") {
+            cfg.imap4_secure_port = std::stoi(p.second);
+        }
+        if (p.first == "submissions") {
+            cfg.submission_port = std::stoi(p.second);
+        }
     }
 
     banner();
@@ -170,7 +140,7 @@ int main(int argc, char* argv[]) {
     std::thread imap4_thread([&]() {
         try {
             IoUringLoop imap4_loop(cfg.imap4_port, [&cred_store](uint64_t id, const std::string& ip, IoUringLoop& loop) {
-                return std::make_unique<IMAPSession>(id, ip, loop, cred_store, "/var/mail/vhosts");
+                return std::make_unique<IMAPSession>(id, ip, loop, cred_store, get_mailroot());
             });
             imap4_loop.run();
         } catch (const std::exception& ex) {
@@ -183,7 +153,7 @@ int main(int argc, char* argv[]) {
     std::thread imap4_secure_thread([&]() {
         try {
             IoUringLoop imap4_secure_loop(cfg.imap4_secure_port, [&cred_store](uint64_t id, const std::string& ip, IoUringLoop& loop) {
-                return std::make_unique<IMAPSession>(id, ip, loop, cred_store, "/var/mail/vhosts");
+                return std::make_unique<IMAPSession>(id, ip, loop, cred_store, get_mailroot());
             });
             imap4_secure_loop.run();
         } catch (const std::exception& ex) {

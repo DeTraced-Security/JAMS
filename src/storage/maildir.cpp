@@ -7,6 +7,7 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>
+#include "globals.hpp"
 
 MailDir::MailDir(std::string base_path) : base_(std::move(base_path)) {};
 
@@ -55,7 +56,7 @@ bool MailDir::deliver(
     );
 
     std::string message = "Received: from unknown (HELO unknown)\r\n"
-        "   by mail.detraced.org from <" + mail_from + "> for <" + rcpt_to + ">; \r\n"
+        "   by " + get_hostname() + " from <" + mail_from + "> for <" + rcpt_to + ">; \r\n"
         "   " + date_buf + "\r\n" + body;
 
     // Create file and write to tmp/

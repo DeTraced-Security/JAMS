@@ -10,13 +10,14 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <sstream>
+#include "globals.hpp"
 
 SubmissionServer::SubmissionServer(
     uint64_t conn_id, const std::string& remote_ip,
     IoUringLoop& loop, Auth::CredentialStore& store
 ) : conn_id_(conn_id), remote_ip_(remote_ip), loop_(loop),
     sasl_(store) {
-        reply(220, "mail.detraced.org ESMTP submission");
+        reply(220, get_hostname() + " ESMTP submission");
 }
 
 void SubmissionServer::on_tls_established() {    
@@ -140,7 +141,7 @@ void SubmissionServer::cmd_ehlo(std::string_view arg) {
     state_ = State::Greeted;
 
     std::vector<std::string> caps = {
-        "mail.detraced.org greets " + client_helo_,
+        get_hostname() + " greets " + client_helo_,
         "8BITMIME",
         "PIPELINING",
         "SIZE 52428800"
@@ -206,7 +207,7 @@ void SubmissionServer::cmd_auth(std::string_view arg) {
 void SubmissionServer::cmd_helo(std::string_view arg) {
     client_helo_ = std::string(trim(arg));
     env_ = {};
-    reply(250, "mail.detraced.org");
+    reply(250, get_hostname());
     state_ = State::Greeted;
 }
 
@@ -294,7 +295,7 @@ void SubmissionServer::cmd_noop() {
 }
 
 void SubmissionServer::cmd_quit() {
-    reply(221, "mail.detraced.org closing connection");
+    reply(221, get_hostname() + " closing connection");
     state_ = State::Done;
     pending_close_ = true;
     loop_.submit_close(conn_id_);
@@ -303,7 +304,7 @@ void SubmissionServer::cmd_quit() {
 bool SubmissionServer::deliver() {
     // TODO: Encrypt before writing
     bool all_ok = true;
-    const std::string local_domain = "mail.detraced.org";
+    const std::string local_domain = get_hostname();
 
     for (const auto& rcpt : env_.rcpt_to) {
         // Extract local/account name (before @)
@@ -311,8 +312,8 @@ bool SubmissionServer::deliver() {
         std::string domain = (at != std::string::npos) ? rcpt.substr(at + 1) : "";
         std::string local = (at != std::string::npos) ? rcpt.substr(0, at) : rcpt;
 
-        if (domain.empty() || domain == "mail.detraced.org") {
-            MailDir mdir("/var/mail/vhosts/" + local);
+        if (domain.empty() || domain == get_hostname()) {
+            MailDir mdir(get_mailroot() + local);
             if (!mdir.deliver(env_.mail_from, rcpt, env_.body)) {
                 std::cerr << "[deliver] failed for " << rcpt << std::endl;
                 all_ok = false;
@@ -499,9 +500,9 @@ bool SubmissionServer::relay_outbound(
         return false;
     }
 
-    send_line("EHLO mail.detraced.org");
+    send_line("EHLO " + get_hostname());
     if (!expect(250)) {
-        send_line("HELO mail.detraced.org");
+        send_line("HELO " + get_hostname());
         if (!expect(250)) {
             ::close(sock);
             return false;
