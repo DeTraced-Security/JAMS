@@ -10,6 +10,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <sstream>
+#include <filesystem>
 
 SubmissionServer::SubmissionServer(
     uint64_t conn_id, const std::string& remote_ip,
@@ -259,6 +260,17 @@ void SubmissionServer::cmd_rcpt(std::string_view arg) {
         return;
     }
 
+    // Only accept inbound on port 25
+    auto at = addr.find('@');
+    std::string domain = (at != std::string::npos) ? addr.substr(at + 1) : "";
+
+    std::transform(domain.begin(), domain.end(), domain.begin(), ::tolower);
+
+    if (domain != "mail.detraced.org") {
+        reply(550, "5.7.1 Relaying denied");
+        return;
+    }
+
     // RFC 5321 4.5.3: max 100
     if (env_.rcpt_to.size() >= 100) {
         reply(452, "Too Many Recipients");
@@ -311,13 +323,33 @@ bool SubmissionServer::deliver() {
         std::string domain = (at != std::string::npos) ? rcpt.substr(at + 1) : "";
         std::string local = (at != std::string::npos) ? rcpt.substr(0, at) : rcpt;
 
+         if (!MailDir::is_safe(local)) {
+            std::cerr << "[deliver] rejected unsafe local part" << std::endl;
+            all_ok = false;
+            continue;
+        }
+
+        std::filesystem::path target = std::filesystem::weakly_canonical(
+            std::filesystem::path("...") / local
+        );
+        std::filesystem::path root = std::filesystem::weakly_canonical("...");
+
+        auto [rm, tm] = std::mismatch(root.begin(), root.end(), target.begin());
+        if (rm != root.end()) {
+            std::cerr << "[deliver] attempted path traversal blocked" << std::endl;
+            all_ok = false;
+            continue;
+        }
+
         if (domain.empty() || domain == "mail.detraced.org") {
+            // It's now safe to construct the mail path
             MailDir mdir("/var/mail/vhosts/" + local);
             if (!mdir.deliver(env_.mail_from, rcpt, env_.body)) {
                 std::cerr << "[deliver] failed for " << rcpt << std::endl;
                 all_ok = false;
             }
         } else {
+
             if (!relay_outbound(env_.mail_from, rcpt, domain, env_.body)) {
                 std::cerr << "[deliver] relay failed for " << rcpt << std::endl;
                 all_ok = false;

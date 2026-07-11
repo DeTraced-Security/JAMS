@@ -136,3 +136,27 @@ std::string MailDir::unique_filename(size_t body_size) const {
     return oss.str();
 }
 
+bool MailDir::is_safe(std::string& addr) {
+    if (addr.empty() || addr.size() > 64) {
+        return false;
+    }   
+
+    for (char c : addr) {
+        if (!std::isalnum(c) 
+            && c != '.' && c != '-' && c != '_' && c != '+'
+        ) {
+            return false;
+        }
+    }
+
+    // Reject leading/trailing dots and double dots
+    if (addr.front() == '.' || addr.back() == '.') {
+        return false;
+    }
+
+    if (addr.find("..") != std::string::npos) {
+        return false;
+    }
+
+    return true;
+}

@@ -7,6 +7,11 @@ class MailDir {
     public:
         explicit MailDir(std::string path);
 
+        /// @brief Safety check against malicious addresses
+        /// @param local 
+        /// @return 
+        static bool is_safe(std::string& addr);
+
         /// @brief Ensures the directories are valid and usable
         /// @return 
         bool ensure_dirs();
