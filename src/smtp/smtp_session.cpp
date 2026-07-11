@@ -1,7 +1,7 @@
 #include "smtp_session.hpp"
 #include "io/io_uring_loop.hpp"
 #include "storage/maildir.hpp"
-
+#include "globals.hpp"
 #include <algorithm>
 #include <cctype>
 #include <iostream>
@@ -14,7 +14,7 @@ SMTPSession::SMTPSession(
     IoUringLoop& loop
 ): conn_id_(conn_id), remote_ip_(remote_ip), loop_(loop) {
     // RFC-5321 4.2: Send 220 Banner on connect
-    reply_code(220, "mail.detraced.org ESMTP mailserver/0.1");
+    reply_code(220, get_hostname() + " ESMTP mailserver/0.1");
     state_ = SMTPState::Greeted; // Wait for EHLO
 }
 
@@ -111,7 +111,7 @@ void SMTPSession::cmd_ehlo(std::string_view arg) {
     env_ = {};
 
     reply_multiline(250, {
-        "mail.detraced.org greets " + client_helo_,
+        get_hostname() + " greets " + client_helo_,
         "8BITMIME",
         "PIPELINING",
         "SIZE 52428800",   // 50 MB max message size
@@ -123,7 +123,7 @@ void SMTPSession::cmd_ehlo(std::string_view arg) {
 void SMTPSession::cmd_helo(std::string_view arg) {
     client_helo_ = std::string(trim(arg));
     env_ = {};
-    reply_code(250, "mail.detraced.org");
+    reply_code(250, get_hostname());
     state_ = SMTPState::Greeted;
 }
 
@@ -206,7 +206,7 @@ void SMTPSession::cmd_noop() {
 }
 
 void SMTPSession::cmd_quit() {
-    reply_code(221, "mail.detraced.org closing connection");
+    reply_code(221, get_hostname() + " closing connection");
     state_ = SMTPState::Done;
     pending_close_ = true;
 }
@@ -239,7 +239,7 @@ bool SMTPSession::deliver() {
         auto at = rcpt.find('@');
         std::string local = (at != std::string::npos) ? rcpt.substr(0, at) : rcpt;
 
-        MailDir mdir("/var/mail/vhosts/" + local);
+        MailDir mdir(get_mailroot() + local);
         if (!mdir.deliver(env_.mail_from, rcpt, env_.body)) {
             std::cerr << "[deliver] failed for " << rcpt << std::endl;
             all_ok = false;
