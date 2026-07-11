@@ -1,5 +1,6 @@
 [server]
 hostname = "mail.detraced.org"
+mailroot = "/var/mail/vhosts"
 
 [ports]
 smtp = 25
