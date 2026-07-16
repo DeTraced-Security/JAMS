@@ -1,7 +1,7 @@
 #pragma once
 
-#include "dns/dns_resolver.hpp"
-#include "dns/dns_types.hpp"
+#include "dns/resolver.hpp"
+#include "dns/types.hpp"
 #include <functional>
 #include <string>
 #include <vector>

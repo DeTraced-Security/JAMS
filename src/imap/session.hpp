@@ -2,7 +2,7 @@
 
 #include "io/io_uring_loop.hpp"
 #include "io/session_factory.hpp"
-#include "auth/cred_store.hpp"
+#include "auth/credentials/cred_store.hpp"
 #include "storage/maildir.hpp"
 #include <cstdint>
 #include <functional>

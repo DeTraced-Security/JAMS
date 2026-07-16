@@ -45,19 +45,29 @@ message(STATUS "OpenSSL:  ${OPENSSL_VERSION}")
 set(SOURCES
     src/main.cpp
     src/io/io_uring_loop.cpp
-    src/smtp/smtp_session.cpp
+    
     src/tls/tls_context.cpp
     src/tls/tls_conn.cpp
+    
     src/storage/maildir.cpp
-    src/dns/dns_message.cpp
-    src/dns/dns_resolver.cpp
-    src/auth/spf_checker.cpp
-    src/auth/sasl.cpp
-    src/auth/dmarc_checker.cpp
-    src/auth/dkim_verifier.cpp
-    src/auth/cred_store.cpp
+    
+    src/dns/message.cpp
+    src/dns/resolver.cpp
+    
+    src/auth/spf/checker.cpp
+    src/auth/sasl/sasl.cpp
+    src/auth/dmarc/checker.cpp
+    src/auth/dkim/verifier.cpp
+    src/auth/dkim/signer.cpp
+    src/auth/credentials/cred_store.cpp
+
     src/smtp/submission_server.cpp
-    src/imap/imap_session.cpp
+    src/smtp/smtp_session.cpp
+    
+    src/imap/session.cpp
+
+    src/config/toml_parse.cpp
+    src/config/toml_parse.hpp
 )
 
 add_executable(mailserver ${SOURCES})
