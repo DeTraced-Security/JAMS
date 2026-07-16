@@ -1,7 +1,7 @@
 #pragma once
 
-#include "dns_types.hpp"
-#include "dns_message.hpp"
+#include "types.hpp"
+#include "message.hpp"
 #include <liburing.h>
 #include <netinet/in.h>
 #include <cstdint>

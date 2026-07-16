@@ -1,4 +1,4 @@
-#include "dkim_verifier.hpp"
+#include "verifier.hpp"
 #include <openssl/bio.h>
 #include <openssl/evp.h>
 #include <openssl/pem.h>

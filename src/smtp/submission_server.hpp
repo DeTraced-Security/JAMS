@@ -1,7 +1,8 @@
 #pragma once
 
-#include "auth/sasl.hpp"
-#include "auth/cred_store.hpp"
+#include "auth/sasl/sasl.hpp"
+#include "auth/credentials/cred_store.hpp"
+#include "auth/dkim/signer.hpp"
 #include "io/session_factory.hpp"
 #include "smtp_session.hpp"
 #include <cstdint>
@@ -51,6 +52,8 @@ class SubmissionServer : public Session {
         }
     
     private:
+        DKIM::DKIMSigner dkim_signer_;
+        
         bool relay_outbound(
             const std::string& from, const std::string& to,
             const std::string& domain, const std::string& body

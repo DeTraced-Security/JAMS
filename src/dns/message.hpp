@@ -1,6 +1,6 @@
 #pragma once
 
-#include "dns_types.hpp"
+#include "types.hpp"
 #include <cstdint>
 #include <optional>
 #include <span>

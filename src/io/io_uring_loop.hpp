@@ -13,7 +13,7 @@
 #include "session_factory.hpp"
 #include "tls/tls_context.hpp"
 #include "tls/tls_conn.hpp"
-#include "dns/dns_resolver.hpp"
+#include "dns/resolver.hpp"
 
 /// @brief Operation Types for io_uring
 enum class op_type : uint8_t {

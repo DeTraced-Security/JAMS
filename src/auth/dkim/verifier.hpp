@@ -7,8 +7,8 @@
 #include <unordered_map>
 #include <vector>
 #include <openssl/evp.h>
-#include "dns/dns_resolver.hpp"
-#include "dns/dns_types.hpp"
+#include "dns/resolver.hpp"
+#include "dns/types.hpp"
 
 namespace DKIM {
     enum class Result {

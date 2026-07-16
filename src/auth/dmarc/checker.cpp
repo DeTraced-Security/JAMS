@@ -1,4 +1,4 @@
-#include "dmarc_checker.hpp"
+#include "checker.hpp"
 #include <algorithm>
 #include <iostream>
 #include <charconv>

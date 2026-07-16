@@ -1,8 +1,8 @@
 #pragma once
 
-#include "dns/dns_resolver.hpp"
-#include "spf_checker.hpp"
-#include "dkim_verifier.hpp"
+#include "dns/resolver.hpp"
+#include "auth/spf/checker.hpp"
+#include "auth/dkim/verifier.hpp"
 #include <functional>
 #include <string>
 #include <vector>
