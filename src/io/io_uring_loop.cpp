@@ -1,6 +1,6 @@
 #include "io_uring_loop.hpp"
 #include "smtp/smtp_session.hpp"
-#include "dns/dns_resolver.hpp"
+#include "dns/resolver.hpp"
 #include "globals.hpp"
 
 #include <liburing.h>

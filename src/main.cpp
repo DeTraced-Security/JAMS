@@ -1,8 +1,8 @@
 #include "io/io_uring_loop.hpp"
-#include "auth/cred_store.hpp"
+#include "auth/credentials/cred_store.hpp"
 #include "smtp/smtp_session.hpp"
 #include "smtp/submission_server.hpp"
-#include "imap/imap_session.hpp"
+#include "imap/session.hpp"
 #include "config/toml_parse.hpp"
 #include "globals.hpp"
 #include <csignal>

@@ -1,4 +1,4 @@
-#include "dns_resolver.hpp"
+#include "resolver.hpp"
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <unistd.h>
