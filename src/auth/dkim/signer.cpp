@@ -3,6 +3,35 @@
 #include <sstream>
 
 namespace DKIM {
+    DKIMSigner::DKIMSigner(const Config &config) : config_(config) {
+        load_private_key();
+    }
+
+    DKIMSigner::~DKIMSigner() {
+        free_private_key();
+    }
+
+    void DKIMSigner::load_private_key() {
+        BIO* bio = BIO_new_file(config_.priv_key_path.c_str(), "r");
+        if (!bio) {
+            throw std::runtime_error("[dkim_signer] [ERROR]: Failed to open DKIM private key: " + config_.priv_key_path);
+        }
+
+        private_key_ = PEM_read_bio_PrivateKey(bio, nullptr, nullptr, nullptr);
+        BIO_free(bio);
+
+        if (!private_key_) {
+            throw std::runtime_error("[dkim_signer] [ERROR]: Failed to load DKIM private key");
+        }
+    }
+
+    void DKIMSigner::free_private_key() {
+        if (private_key_ != nullptr) {
+            EVP_PKEY_free(private_key_);
+            private_key_ = nullptr;
+        }
+    }
+    
     std::string DKIMSigner::base64_encode(const std::vector<uint8_t>& data) {
         BIO* b64 = BIO_new(BIO_f_base64());
         BIO* mem = BIO_new(BIO_s_mem());
