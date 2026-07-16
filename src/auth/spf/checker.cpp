@@ -1,4 +1,4 @@
-#include "spf_checker.hpp"
+#include "checker.hpp"
 #include <arpa/inet.h>
 #include <algorithm>
 #include <array>

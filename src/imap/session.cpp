@@ -1,5 +1,5 @@
-#include "imap_session.hpp"
-#include "auth/cred_store.hpp"
+#include "imap/session.hpp"
+#include "auth/credentials/cred_store.hpp"
 #include <dirent.h>
 #include <fcntl.h>
 #include <sys/stat.h>
