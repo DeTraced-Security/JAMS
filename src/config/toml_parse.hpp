@@ -4,10 +4,11 @@
 #include <iostream>
 #include <vector>
 #include <unordered_map>
+#include <optional>
 
 class TOMLParser {
     public:
-        TOMLParser(const std::string path);
+        explicit TOMLParser(const std::string path);
         ~TOMLParser();
 
         static void error(const char* msg) {
@@ -15,10 +16,11 @@ class TOMLParser {
             return;
         };
 
-        static std::unordered_map<std::string, std::string> fetch_configs();
+        std::unordered_map<std::string, std::string> fetch_configs();
 
     private:
         bool load_configs();
         std::string path_;
-        static toml::Result toml_results;
+        std::optional<toml::Result> toml_results;
+
 };
