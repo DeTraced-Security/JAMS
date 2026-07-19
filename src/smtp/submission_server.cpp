@@ -563,6 +563,7 @@ bool SubmissionServer::relay_outbound(
 
     if (ok) {
         std::istringstream ss(outbound);
+        std::istringstream ss(outbound);
         std::string line;
         while (std::getline(ss, line)) {
             if (!line.empty() && line.front() == '.') {
