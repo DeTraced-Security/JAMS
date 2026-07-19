@@ -5,7 +5,7 @@
 
 extern volatile sig_atomic_t g_shutdown;
 
-inline TOMLParser load_configs{"./config/server.toml"};
+inline TOMLParser load_configs{"../config/server.toml"};
 inline const auto configs = load_configs.fetch_configs();
 
 inline std::string get_hostname() {

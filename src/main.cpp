@@ -38,7 +38,7 @@ static void handle_signal(int sig) {
 void help(const char* prog) {
     std::cerr << "Usage: " << prog << " [options]"
         << "\n"
-        << "Server Configuration are made via the `./config/server.toml` file"
+        << "Server Configuration are made via the `../config/server.toml` file"
         << "\n"
         << "notes:\n"
         << "  ports below 1024 require CAP_NET_BIND_SERVICE or root\n"

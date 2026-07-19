@@ -15,10 +15,10 @@
 SubmissionServer::SubmissionServer(
     uint64_t conn_id, const std::string& remote_ip,
     IoUringLoop& loop, Auth::CredentialStore& store
-) : dkim_signer_({ // TODO: Remove temporary hard-coded values
-        .domain = "",
-        .selector = "",
-        .priv_key_path = ""
+) : dkim_signer_({
+        .domain = get_hostname(),
+        .selector = "jams",
+        .priv_key_path = "/etc/jams/tls/key.pem"
     }), conn_id_(conn_id), remote_ip_(remote_ip), loop_(loop), sasl_(store) {
         reply(220, get_hostname() + " ESMTP submission");
 }

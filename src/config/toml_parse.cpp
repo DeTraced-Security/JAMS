@@ -16,11 +16,11 @@ TOMLParser::~TOMLParser() {
 }
 
 bool TOMLParser::load_configs() {
-    const std::string absolute_path = std::filesystem::absolute(path_);
-    const bool path_ok = std::filesystem::is_directory(absolute_path);
+    const std::string absolute_path = std::filesystem::weakly_canonical(path_).string();
+    const bool path_ok = std::filesystem::is_regular_file(absolute_path);
 
     if (!path_ok) {
-        TOMLParser::error("Unable to verify absolute path provided!");
+        TOMLParser::error(std::format("Unable to verify config file path provided!\nFile given: {}", absolute_path).c_str());
         return false;
     }
 
