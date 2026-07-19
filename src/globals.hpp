@@ -5,29 +5,40 @@
 
 extern volatile sig_atomic_t g_shutdown;
 
-const TOMLParser load_configs = TOMLParser("./config/server.toml");
-extern const auto configs = TOMLParser::fetch_configs();
+inline TOMLParser load_configs{"../config/server.toml"};
+inline const auto configs = load_configs.fetch_configs();
 
-std::string get_hostname() {
+inline std::string get_hostname() {
+    std::string result{};
+    
     for (auto& host : configs) {
         if (host.first == "hostname") {
-            return host.second;
+            result = host.second;
         }
     }
+
+    return result;
 };
 
-std::string get_mailroot() {
+inline std::string get_mailroot() {
+    std::string result{};
     for (auto& root : configs) {
         if (root.first == "mailroot") {
-            return root.second;
+            result = root.second;
         }
     }
+
+    return result;
 }
 
-std::string get_db_path() {
+inline std::string get_db_path() {
+    std::string result{};
+
     for (auto& db : configs) {
         if (db.first == "db_path") {
-            return db.second;
+            result = db.second;
         }
     }
+
+    return result;
 }

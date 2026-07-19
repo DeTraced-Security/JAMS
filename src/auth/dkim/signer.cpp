@@ -1,5 +1,6 @@
 #include "signer.hpp"
 #include <algorithm>
+#include <chrono>
 #include <sstream>
 
 namespace DKIM {
@@ -202,6 +203,27 @@ namespace DKIM {
 
             return result;
         }
+    }
+
+    std::string DKIMSigner::sign(const std::string& headers, const std::string& body) {
+        std::string canon_method = (config_.body_canon == Canonicalization::Relaxed) ? "relaxed" : "simple";
+        std::string canon_body = canonicalize_body(body, canon_method);
+        std::vector<uint8_t> bh = sha256(canon_body);
+        std::string body_hash = base64_encode(bh);
+
+        std::string header_list = build_header_list();
+
+        uint64_t timestamp = static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::seconds>(
+                std::chrono::system_clock::now().time_since_epoch()
+            ).count()
+        );
+
+        std::string dkim_header = build_signature_header(body_hash, header_list, timestamp, config_.signature_expiry);
+        std::string signing_data = build_signing_data(headers, dkim_header);
+        std::string signature = rsa_sha256_sign(signing_data);
+
+        return dkim_header + signature;
     }
 
     std::string DKIMSigner::rsa_sha256_sign(const std::string &data) const {

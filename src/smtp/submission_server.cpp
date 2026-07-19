@@ -15,12 +15,11 @@
 SubmissionServer::SubmissionServer(
     uint64_t conn_id, const std::string& remote_ip,
     IoUringLoop& loop, Auth::CredentialStore& store
-) : conn_id_(conn_id), remote_ip_(remote_ip), loop_(loop),
-    sasl_(store), dkim_signer_({ // TODO: Remove temporary hard-coded values
-        .domain = "",
-        .selector = "",
-        .priv_key_path = ""
-    }) {
+) : dkim_signer_({
+        .domain = get_hostname(),
+        .selector = "jams",
+        .priv_key_path = "/etc/jams/tls/key.pem"
+    }), conn_id_(conn_id), remote_ip_(remote_ip), loop_(loop), sasl_(store) {
         reply(220, get_hostname() + " ESMTP submission");
 }
 
@@ -535,10 +534,28 @@ bool SubmissionServer::relay_outbound(
     std::string outbound = body;
 
     if (ok) {
+        std::string msg_headers;
+        std::string msg_body;
+
+        auto sep = body.find("\r\n\r\n");
+        if (sep != std::string::npos) {
+            msg_headers = body.substr(0, sep + 2);
+            msg_body = body.substr(sep + 4);
+        } else {
+            sep = body.find("\n\n");
+            if (sep != std::string::npos) {
+                msg_headers = body.substr(0, sep + 1);
+                msg_body = body.substr(sep + 2);
+            } else {
+                msg_headers = body;
+                msg_body = "";
+            }
+        }
+
         try {
-            outbound = dkim_signer_.sign(body, from);
+            outbound = dkim_signer_.sign(msg_headers, msg_body);
         } catch (const std::exception& e) {
-            std::cerr << "[relay] [ERROR]: DKIM Signing failed because: " << e.what() << std::endl;
+            std::cerr << "[outbound_relay] [ERROR]: DKIM Signing failed: " << e.what() << std::endl;
             ok = false;
         }
     }
