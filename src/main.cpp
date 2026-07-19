@@ -11,6 +11,7 @@
 #include <string>
 #include <thread>
 #include <iostream>
+#include <unistd.h>
 
 // build info
 static constexpr const char* JAMS_VERSION = "0.0.1-alpha";
@@ -26,10 +27,15 @@ static void handle_signal(int sig) {
         ? "\n[JAMS] SIGINT received... Shutting down\n" 
         : "\n[JAMS] SIGTERM received... Shutting down\n";
 
-    (void)write(STDERR_FILENO, msg, strlen(msg));
+    ssize_t is_ok = write(STDERR_FILENO, msg, strlen(msg));
+
+    if (is_ok < 0) {
+        // Cannot safely use std::cerr/printf here.
+        // Nothing useful can be done in a signal handler.
+    }
 }
 
-static void help(const char* prog) {
+void help(const char* prog) {
     std::cerr << "Usage: " << prog << " [options]"
         << "\n"
         << "Server Configuration are made via the `./config/server.toml` file"
@@ -39,7 +45,7 @@ static void help(const char* prog) {
         << "  set with: sudo setcap cap_net_bind_service=+ep ./mailserver" << std::endl;
 }
 
-static void banner() {
+void banner() {
     std::cout
         << "┌─────────────────────────────────────────┐\n"
         << "│   JAMS — Just Another Mail Server       │\n"
@@ -59,6 +65,11 @@ struct Config {
 
 
 int main(int argc, char* argv[]) {
+    if (argc > 1 && std::string(argv[1]) == "--help") {
+        help("mailserver");
+        return 0;
+    }
+
     Config cfg;
 
     for (auto& p : configs) {
@@ -120,7 +131,7 @@ int main(int argc, char* argv[]) {
         } catch (const std::exception& ex) {
             std::cerr << "[JAMS - FATAL] SMTP loop: " << ex.what() << std::endl; 
             server_failed = true;
-            raise(SIGTERM);  
+            g_shutdown = 1;  
         }
     });
 
@@ -133,7 +144,7 @@ int main(int argc, char* argv[]) {
         } catch(const std::exception& ex) {
             std::cerr << "[JAMS - FATAL] Submission loop: " << ex.what() << std::endl;
             server_failed = true;
-            raise(SIGTERM);
+            g_shutdown = 1;
         }
     });
 
@@ -146,7 +157,7 @@ int main(int argc, char* argv[]) {
         } catch (const std::exception& ex) {
             std::cerr << "[JAMS - FATAL] IMAP4 loop: " << ex.what() << std::endl;
             server_failed = true;
-            raise(SIGTERM);
+            g_shutdown = 1;
         }
     });
 
