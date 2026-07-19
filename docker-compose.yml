@@ -1,0 +1,24 @@
+services:
+  jams:
+    image: ghcr.io/detraced-security/jams:latest
+    container_name: jams
+    restart: unless-stopped
+    ports:
+      - "25:25"
+      - "587:587"
+      - "143:143"
+      - "993:993"
+    volumes:
+      - jams-db:/var/lib/jams
+      - jams-mail:/var/mail/vhosts
+      - ./certs:/etc/jams:ro
+    environment:
+      TZ: UTC
+    cap_add:
+      - NET_BIND_SERVICE
+    secuirty_opt:
+      - no-new-privileges:true
+
+volumes:
+  jams-db:
+  jams-mail:
