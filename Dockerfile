@@ -28,8 +28,8 @@ RUN mkdir -p /etc/jams/tls
 RUN openssl req \
   -x509 \
   -newkey rsa:4096 \
-  -keyout certs/key.pem \
-  -out certs/cert.pem \
+  -keyout /etc/jams/tls/key.pem \
+  -out /etc/jams/tls/cert.pem \
   -days 365 \
   -nodes \
   -subj "/CN=mail.detraced.org" # This is an example
