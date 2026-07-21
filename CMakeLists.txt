@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(mailserver CXX)
+project(mailserver LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -70,6 +70,7 @@ set(SOURCES
     src/config/toml_parse.hpp
 
     src/utils/logger.cpp
+    src/config/tomlc17.c
 )
 
 add_executable(mailserver ${SOURCES})
@@ -79,6 +80,7 @@ target_include_directories(mailserver PRIVATE
     ${LIBURING_INCLUDE_DIR}
     ${OPENSSL_INCLUDE_DIR}
     ${SQLite3_INCLUDE_DIRS}
+    ${CMAKE_SOURCE_DIR}/src/config
 )
 
 target_link_libraries(mailserver PRIVATE
