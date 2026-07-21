@@ -68,6 +68,8 @@ set(SOURCES
 
     src/config/toml_parse.cpp
     src/config/toml_parse.hpp
+
+    src/utils/logger.cpp
 )
 
 add_executable(mailserver ${SOURCES})
