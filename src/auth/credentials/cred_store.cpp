@@ -188,47 +188,74 @@ namespace Auth {
         if (old_passwd.empty() || new_passwd.empty() || username.empty()) {
             return false;
         }
-        auto hashed_old = hash_password(old_passwd);
-        auto hashed_new = hash_password(new_passwd);
+        
+        sqlite3_stmt* sel{nullptr};
+        if (sqlite3_prepare_v2(db_, "SELECT hash, salt, iterations FROM users WHERE username = ?", -1, &sel, nullptr) != SQLITE_OK) {
+            return false;
+        }
 
+        sqlite3_bind_text(sel, 1, username.c_str(), -1, SQLITE_STATIC);
+
+        if (sqlite3_step(sel) != SQLITE_ROW) {
+            sqlite3_finalize(sel);
+            return false;
+        }
+
+        std::string stored_hash = reinterpret_cast<const char*>(sqlite3_column_text(sel, 0));
+        std::string stored_salt = reinterpret_cast<const char*>(sqlite3_column_text(sel, 1));
+        int stored_iterations = sqlite3_column_int(sel, 2);
+
+        sqlite3_finalize(sel);
+
+        auto check = hash_password(old_passwd, stored_salt, stored_iterations);
+        if (!constant_time_eq(check.hash, stored_hash)) {
+            return false;
+        }
+
+        auto hashed_new = hash_password(new_passwd);
+        sqlite3_stmt* upd{nullptr};
+
+        if (sqlite3_prepare_v2(db_, "UPDATE users SET hash = ?, salt = ?, iterations = ? WHERE username = ?", -1, &upd, nullptr) != SQLITE_OK) {
+            return false;
+        }
+
+        sqlite3_bind_text(upd, 1, hashed_new.hash.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_text(upd, 2, hashed_new.salt.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_int(upd, 3, hashed_new.iterations);
+        sqlite3_bind_text(upd, 4, username.c_str(), -1, SQLITE_STATIC);
+
+        bool ok = (sqlite3_step(upd) == SQLITE_DONE);
+        sqlite3_finalize(upd);
+
+        return ok && sqlite3_changes(db_) > 0;
+    }
+
+    CredentialStore::HashedPassword CredentialStore::hash_password(const std::string& password, const std::string& salt, int iterations) {
+        HashedPassword hashed;
+        hashed.salt = salt;
+        hashed.iterations = iterations;
+        hashed.hash = pbkdf2(password, hashed.salt, hashed.iterations);
+
+        return hashed;
+    }
+
+    bool CredentialStore::user_exists(const std::string& username) {
         sqlite3_stmt* stmt{nullptr};
 
         if (sqlite3_prepare_v2(
-            db_, "UPDATE users SET hash = ?, salt = ?, iterations = ? "
-            "WHERE username = ? AND hash = ?", -1, &stmt, nullptr
+            db_, "SELECT 1 FROM users WHERE username = ?",
+            -1, &stmt, nullptr
         ) != SQLITE_OK) {
             return false;
         }
 
-        sqlite3_bind_text(stmt, 1, hashed_new.hash.c_str(), -1, SQLITE_STATIC);
-        sqlite3_bind_text(stmt, 2, hashed_new.salt.c_str(), -1, SQLITE_STATIC);
-        sqlite3_bind_int(stmt, 3, hashed_new.iterations);
-        sqlite3_bind_text(stmt, 4, username.c_str(), -1, SQLITE_STATIC);
-        sqlite3_bind_text(stmt, 5, hashed_old.hash.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_TRANSIENT);
 
-        bool ok = (sqlite3_step(stmt) == SQLITE_DONE);
+        bool ok = (sqlite3_step(stmt) == SQLITE_ROW);
         sqlite3_finalize(stmt);
 
         return ok;
     }
-
-bool CredentialStore::user_exists(const std::string& username) {
-    sqlite3_stmt* stmt{nullptr};
-
-    if (sqlite3_prepare_v2(
-        db_, "SELECT 1 FROM users WHERE username = ?",
-        -1, &stmt, nullptr
-    ) != SQLITE_OK) {
-        return false;
-    }
-
-    sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_TRANSIENT);
-
-    bool ok = (sqlite3_step(stmt) == SQLITE_ROW);
-    sqlite3_finalize(stmt);
-
-    return ok;
-}
 
     CredentialStore::HashedPassword CredentialStore::hash_password(
         const std::string& passwd

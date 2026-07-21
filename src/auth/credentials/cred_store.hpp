@@ -90,6 +90,8 @@ namespace Auth {
             /// @return 
             static HashedPassword hash_password(const std::string& password);
 
+            static HashedPassword hash_password(const std::string& passwd, const std::string& salt, int interations);
+
             /// @brief Returns the b64 encoded 32byte PBKDF2 hash
             /// @param passwd 
             /// @param salt 
