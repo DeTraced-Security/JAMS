@@ -1,4 +1,5 @@
 #include "checker.hpp"
+#include "globals.hpp"
 #include <arpa/inet.h>
 #include <algorithm>
 #include <array>
@@ -60,7 +61,7 @@ namespace SPF {
             return;
         }
 
-        std::cout << "[SPF] checking " << client_ip << " for domain=" << state->sender_domain << std::endl;
+        logger.info("[SPF] Checking " + client_ip + " for domain=" + state->sender_domain);
 
         fetch_and_eval(state->sender_domain, state);
     }
@@ -555,10 +556,10 @@ namespace SPF {
     }
 
     void SPFChecker::finish(std::shared_ptr<EvalState> state, Result result, std::string explanation) {
-        std::cout << "[SPF] result=" << result_to_string(result)
-            << " domain=" << state->sender_domain
-            << " ip=" << state->client_ip
-            << " reason=" << explanation << std::endl;
+        logger.info("[SPF] result=" + std::string(result_to_string(result))
+            + " domain=" + state->sender_domain
+            + " ip=" + state->client_ip
+            + " reason=" + explanation);
 
         state->callback({result, std::move(explanation)});
     }

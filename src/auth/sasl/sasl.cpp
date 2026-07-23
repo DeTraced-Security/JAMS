@@ -1,4 +1,5 @@
 #include "sasl.hpp"
+#include "globals.hpp"
 #include <openssl/bio.h>
 #include <openssl/buffer.h>
 #include <openssl/evp.h>
@@ -106,7 +107,7 @@ namespace Auth {
             return auth_failure();
         }
 
-        std::cout << "[SASL] PLAIN auth attempt for user: " << authcid << std::endl;
+        logger.info("[SASL] PLAIN auth attempt for user: " + authcid);
 
         if (store_.verify(authcid, passwd)) {
             username_ = authcid;
@@ -140,7 +141,7 @@ namespace Auth {
                 return auth_failure();
             }
 
-            std::cout << "[SASL] LOGIN auth attempt for user: " << pending_username_ << std::endl;
+            logger.info("[SASL] LOGIN auth attempt for user: " + pending_username_);
 
             if (store_.verify(pending_username_, password)) {
                 username_ = pending_username_;
@@ -157,7 +158,7 @@ namespace Auth {
 
     SASLSession::Response SASLSession::auth_success() {
         authenticated_ = true;
-        std::cout << "[SASL] authenticated: " << username_ << std::endl;
+        logger.info("[SASL] Authenticated: " + username_);
 
         return {235, "2.7.0 Authentication successful"};
     }
@@ -168,7 +169,7 @@ namespace Auth {
         pending_username_.clear();
         state_ = State::Idle;
 
-        std::cerr << "[SASL] authentication failed" << std::endl;
+        logger.error("[SASL] Authentication failed");
 
         return {535, "5.7.8 Authentication credentials invalid"};
     }

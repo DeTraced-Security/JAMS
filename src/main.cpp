@@ -102,23 +102,24 @@ int main(int argc, char* argv[]) {
     signal(SIGPIPE, SIG_IGN);
 
     // Credential Storage
-    std::cout << "[JAMS] Opening user database: " << cfg.db_path << std::endl;
+    logger.info("[JAMS] Opening user database: " + cfg.db_path);
     Auth::CredentialStore cred_store(cfg.db_path);
 
     if (cred_store.db_ == nullptr) {
-        std::cerr << "[JAMS - FATAL] Could not open database: "
-            << cfg.db_path << "\n"
-            << "        create the directory first:\n"
-            << "        sudo mkdir -p /var/lib/jams\n"
-            << "        sudo chown $USER /var/lib/jams" << std::endl;
+        logger.error(
+            "[FATAL] [JAMS] Could not open database: " + cfg.db_path + 
+            "\n        create the directory first:\n" +
+            "        sudo mkdir -p /var/lib/jams\n" +
+            "        sudo chown $USER /var/lib/jams"
+        );
         
         return 1;
     }
 
     // SMTP inbound loop
-    std::cout << "[JAMS] Starting SMTP inbound on port: " << cfg.smtp_port << std::endl;
-    std::cout << "[JAMS] Hostname: " << JAMS_HOSTNAME << std::endl;
-    std::cout << "[JAMS] Ready\n" << std::endl;
+    logger.info("[JAMS] Starting SMTP inbound on port: " + cfg.smtp_port);
+    logger.info("[JAMS] Hostname: " + JAMS_HOSTNAME);
+    logger.info("[JAMS] Ready\n");
 
     std::atomic<bool> server_failed{false};
 
@@ -129,7 +130,7 @@ int main(int argc, char* argv[]) {
             });
             smtp_loop.run();
         } catch (const std::exception& ex) {
-            std::cerr << "[JAMS - FATAL] SMTP loop: " << ex.what() << std::endl; 
+            logger.error("[FATAL] [JAMS] SMTP Loop: " + std::string(ex.what()));
             server_failed = true;
             g_shutdown = 1;  
         }
@@ -142,7 +143,7 @@ int main(int argc, char* argv[]) {
             });
             submission_loop.run();
         } catch(const std::exception& ex) {
-            std::cerr << "[JAMS - FATAL] Submission loop: " << ex.what() << std::endl;
+            logger.error("[FATAL] [JAMS] Submission Loop: " + std::string(ex.what()));
             server_failed = true;
             g_shutdown = 1;
         }
@@ -155,7 +156,7 @@ int main(int argc, char* argv[]) {
             });
             imap4_loop.run();
         } catch (const std::exception& ex) {
-            std::cerr << "[JAMS - FATAL] IMAP4 loop: " << ex.what() << std::endl;
+            logger.error("[FATAL] [JAMS] IMAP4 Loop: " + std::string(ex.what()));
             server_failed = true;
             g_shutdown = 1;
         }
@@ -168,7 +169,7 @@ int main(int argc, char* argv[]) {
             });
             imap4_secure_loop.run();
         } catch (const std::exception& ex) {
-            std::cerr << "[JAMS - FATAL] IMAP4 Secure loop: " << ex.what() << std::endl;
+            logger.error("[FATAL] [JAMS] IMAP4 Secure Loop: " + std::string(ex.what()));
             server_failed = true;
             raise(SIGTERM);
         }
@@ -179,6 +180,7 @@ int main(int argc, char* argv[]) {
     imap4_thread.join();
     imap4_secure_thread.join();
 
-    std::cout << "[JAMS] Shutdown complete" << std::endl;
+    logger.info("[JAMS] Exiting...");
+
     return server_failed ? EXIT_FAILURE : 0;
 }

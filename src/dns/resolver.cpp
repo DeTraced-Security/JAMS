@@ -1,4 +1,5 @@
 #include "resolver.hpp"
+#include "globals.hpp"
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -12,6 +13,7 @@ namespace DNS {
         udp_fd_ = ::socket(AF_INET, SOCK_DGRAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
 
         if (udp_fd_ < 0) {
+            logger.error("[FATAL] [DNS] socket(): " + std::string(strerror(errno)));
             throw std::runtime_error(
                 std::string("[DNS] socket(): " ) + strerror(errno)
             );
@@ -22,15 +24,17 @@ namespace DNS {
 
         if (::inet_pton(AF_INET, nameserver.c_str(), &nameserver_addr_.sin_addr) != 1) {
             ::close(udp_fd_);
+            logger.error("[FATAL] [DNS] Invalid nameserver address: " + nameserver);
             throw std::runtime_error("[DNS] invalid nameserver address: " + nameserver);
         }
 
         if (::connect(udp_fd_, reinterpret_cast<sockaddr*>(&nameserver_addr_), sizeof(nameserver_addr_)) < 0) {
             ::close(udp_fd_);
+            logger.error("[FATAL] [DNS] connect(): " + std::string(strerror(errno)));
             throw std::runtime_error(std::string("[DNS] connect(): ") + strerror(errno));
         }
 
-        std::cout << "[DNS] resolver initialised, nameserver=" << nameserver << std::endl;
+        logger.info("[DNS] Resovler initialised, nameserver=" + nameserver);
     }
 
     DNSResolver::~DNSResolver() {
@@ -49,7 +53,7 @@ namespace DNS {
         pq.retries = 0;
         pq.wire = DNSMessage::encode_query(name, type, txid);
 
-        std::cout << "[DNS] query txid=" << txid << " name=" << name << std::endl;
+        logger.info("[DNS] Query txid=" + std::to_string(txid) + " name=" + name);
 
         submit_query(txid, pq);
         pending_[txid] = std::move(pq);
@@ -146,7 +150,7 @@ namespace DNS {
 
     void DNSResolver::on_send(uint16_t txid, int res) {
         if (res < 0) {
-            std::cerr << "[DNS] send failed texid=" << txid << " err=" << strerror(-res) << std::endl;
+            logger.error("[DNS] Send failed texid=" + std::to_string(txid) + " err=" + std::string(strerror(-res)));
         }
 
         auto it = pending_.find(txid);
@@ -172,7 +176,7 @@ namespace DNS {
 
         if (res == -ETIME || res == -ECANCELED) {
             if (pq.retries < MAX_RETRIES) {
-                std::cout << "[DNS] timeout txid=" << txid << " retrying..." << std::endl;
+                logger.info("[DNS] Timeout txid=" + std::to_string(txid) + " retrying...");
 
                 ++pq.retries;
 
@@ -186,7 +190,7 @@ namespace DNS {
                 submit_query(new_txid, retry_pq);
                 pending_[new_txid] = std::move(retry_pq);            
             } else {
-                std::cerr << "[DNS] query timed out txid=" << txid << " name=" << pq.name << std::endl;
+                logger.error("[DNS] Query timed out txid=" + std::to_string(txid) + " name=" + pq.name);
 
                 pq.callback({ResolveStatus::Timeout, {}});
                 pending_.erase(pit);
@@ -255,7 +259,7 @@ namespace DNS {
     }
 
     void DNSResolver::on_timeout(uint16_t txid) {
-        std::cout << "[DNS] timeout SQE fired txid=" << txid << std::endl;
+        logger.info("[DNS] Timeout SQE fired txid=" + std::to_string(txid));
     }
 
     uint16_t DNSResolver::alloc_txid() {
@@ -276,6 +280,7 @@ namespace DNS {
             sqe = io_uring_get_sqe(ring_);
 
             if (!sqe) {
+                logger.error("[FATAL] [DNS] io_uring SQ overflow");
                 throw std::runtime_error("[DNS] io_uring SQ overflow");
             }
         }

@@ -27,7 +27,7 @@ void SubmissionServer::on_tls_established() {
     tls_active_ = true;
     
     // No banner needed here, EHLO is received after the handshake
-    std::cout << "[Submission]: " << conn_id_ << " TLS handshake completed" << std::endl;
+    logger.info("[SUBMISSION]: " + std::to_string(conn_id_) + " TLS handshake completed");
 }
 
 void SubmissionServer::on_data(std::span<const uint8_t> bytes) {
@@ -107,8 +107,8 @@ void SubmissionServer::process_line(std::string_view line) {
     for (char& c : verb) {
         c = static_cast<char>(std::toupper(c));
     }
-
-    std::cout << "[submission: " << conn_id_ << "]" << line << std::endl;
+    
+    logger.debug("[SUBMISSION]: " + std::to_string(conn_id_) + std::string(line));
 
     if (verb == "EHLO") {
         cmd_ehlo(arg);
@@ -318,12 +318,12 @@ bool SubmissionServer::deliver() {
         if (domain.empty() || domain == get_hostname()) {
             MailDir mdir(get_mailroot() + local);
             if (!mdir.deliver(env_.mail_from, rcpt, env_.body)) {
-                std::cerr << "[deliver] failed for " << rcpt << std::endl;
+                logger.error("[DELIVER] Failed for: " + rcpt);
                 all_ok = false;
             }
         } else {
             if (!relay_outbound(env_.mail_from, rcpt, domain, env_.body)) {
-                std::cerr << "[deliver] relay failed for " << rcpt << std::endl;
+                logger.error("[DELIVER] Relay failed for: " + rcpt);
                 all_ok = false;
             }
         }
@@ -341,7 +341,7 @@ bool SubmissionServer::relay_outbound(
     int len = res_query(domain.c_str(), C_IN, T_MX, answer, sizeof(answer));
 
     if (len < 0) {
-        std::cerr << "[relay] MX lookup failed for: " << domain << std::endl;
+        logger.error("[RELAY] MX Lookup failed for: " + domain);
         return false;
     }
 
@@ -427,14 +427,14 @@ bool SubmissionServer::relay_outbound(
         mx_host = domain;
     }
 
-    std::cerr << "[relay] MX for " << domain << " -> " << mx_host << " (prio=" << mx_prio << ")" << std::endl;
+    logger.debug("[RELAY] MX For: " + domain + " -> " + mx_host + " (prio=" + std::to_string(mx_prio) + ")");
 
     struct addrinfo hints{}, *res = nullptr;
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
 
     if (getaddrinfo(mx_host.c_str(), "25", &hints, &res) != 0 || !res) {
-        std::cerr << "[relay] getaddrinfo failed for " << mx_host << std::endl;
+        logger.error("[RELAY] getaddrinfo failed for: " + mx_host);
         return false;
     }
 
@@ -450,7 +450,8 @@ bool SubmissionServer::relay_outbound(
     setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
 
     if (::connect(sock, res->ai_addr, res->ai_addrlen) != 0) {
-        std::cerr << "[relay] connect failed to " << mx_host << ": " << strerror(errno) << std::endl;
+        logger.error("[RELAY] connect failed for: " + mx_host + " because: " + std::string(strerror(errno)));
+
         ::close(sock);
         freeaddrinfo(res);
         return false;
@@ -470,12 +471,13 @@ bool SubmissionServer::relay_outbound(
             }
         }
         
-        std::cerr << "[relay << " << line;
+        logger.debug("[RELAY] " + line);
         return line;
     };
 
     auto send_line = [&](const std::string& line) {
-        std::cerr << "[relay] >> " << line;
+        logger.debug("[RELAY] " + line);
+
         std::string out = line + "\r\n";
         ::send(sock, out.c_str(), out.size(), 0);
     };
@@ -555,7 +557,7 @@ bool SubmissionServer::relay_outbound(
         try {
             outbound = dkim_signer_.sign(msg_headers, msg_body);
         } catch (const std::exception& e) {
-            std::cerr << "[outbound_relay] [ERROR]: DKIM Signing failed: " << e.what() << std::endl;
+            logger.error("[OUTBOUND_RELAY] DKIM Signing failed: " + std::string(e.what()));
             ok = false;
         }
     }
@@ -584,7 +586,7 @@ bool SubmissionServer::relay_outbound(
     expect(221);
     ::close(sock);
 
-    std::cerr << "[relay] delivery to " << to << (ok ? " succeeded" : "failed") << std::endl;
+    logger.debug("[RELAY] Delivery to " + to + std::string(ok ? "succeeded" : "failed"));
     return ok;
 }
 
@@ -592,7 +594,7 @@ void SubmissionServer::reply(int code, std::string_view text) {
     std::string line(std::to_string(code) + " " + std::string(text));
     line += "\r\n";
     
-    std::cout << "[submission:" << conn_id_ << "] > " << text << std::endl;
+    logger.debug("[SUBMISSION] " + std::to_string(conn_id_) + " > " + std::string(text));
 
     std::vector<uint8_t> buf(line.begin(), line.end());
     loop_.submit_write(conn_id_, std::move(buf));
@@ -611,7 +613,7 @@ void SubmissionServer::reply_multiline(int code, const std::vector<std::string> 
         out += "\r\n";
     }
 
-    std::cout << "[submission:" << conn_id_ << "] > " << code_str << " (multiline, " << lines.size() << " lines)\n";
+    logger.debug("[SUBMISSION] " + std::to_string(conn_id_) + " > " + code_str + "(multiline, " + std::to_string(lines.size()) + " lines)");
 
     std::vector<uint8_t> buf(out.begin(), out.end());
     loop_.submit_write(conn_id_, std::move(buf));

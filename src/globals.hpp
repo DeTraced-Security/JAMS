@@ -1,12 +1,14 @@
 #pragma once
 
 #include "config/toml_parse.hpp"
+#include "utils/logger.hpp"
 #include <csignal>
 
 extern volatile sig_atomic_t g_shutdown;
 
 inline TOMLParser load_configs{"../config/server.toml"};
 inline const auto configs = load_configs.fetch_configs();
+inline Logger logger{"../logs/jams.txt"};
 
 inline std::string get_hostname() {
     std::string result{};
