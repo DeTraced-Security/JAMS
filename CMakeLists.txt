@@ -67,6 +67,9 @@ set(SOURCES
     src/imap/session.cpp
 
     src/config/toml_parse.cpp
+    src/config/toml_parse.hpp
+
+    src/utils/logger.cpp
     src/config/tomlc17.c
 )
 

@@ -1,4 +1,5 @@
 #include "checker.hpp"
+#include "globals.hpp"
 #include <algorithm>
 #include <iostream>
 #include <charconv>
@@ -60,7 +61,7 @@ namespace DMARC {
         state->callback = std::move(callback); // hand ownership to state
 
         std::string root_domain = org_domain(from_domain);
-        std::cout << "[DMARC] checking from_domain=" << from_domain << " org_domain=" << root_domain << std::endl;
+        logger.info("[DMARC] checking from_domain=" + from_domain + " org_domain=" + root_domain);
 
         fetch_and_evaluate("_dmarc." + root_domain, from_domain, root_domain != from_domain, state);
     }
@@ -165,10 +166,12 @@ namespace DMARC {
 
         bool dmarc_passed = spf_aligned || dkim_aligned;
 
-        std::cout << "[DMARC] spf_aligned=" << spf_aligned
-            << " dkim_aligned=" << dkim_aligned
-            << " pass=" << dmarc_passed
-            << " policy=" << policy_to_string(used_policy) << std::endl;
+        logger.info(
+            "[DMARC] spf_aligned=" + std::to_string(spf_aligned)
+            + " dkim_aligned=" + std::to_string(dkim_aligned)
+            + " pass=" + std::to_string(dmarc_passed)
+            + " policy=" + std::string(policy_to_string(used_policy))
+        );
         
         if (dmarc_passed) {
             finish(state, Result::Pass, Policy::None, spf_aligned, dkim_aligned);
@@ -329,10 +332,12 @@ namespace DMARC {
         std::shared_ptr<EvalState> state, Result result, Policy policy,
         bool spf_aligned, bool dkim_aligned, std::string explanation
     ) {
-        std::cout << "[DMARC] result= " << result_to_string(result)
-            << " policy=" << policy_to_string(policy)
-            << " from=" << state->from_domain
-            << (explanation.empty() ? "" : " reason=" + explanation) << std::endl;
+        logger.info(
+            "[DMARC] result= " + std::string(result_to_string(result))
+            + " policy=" + std::string(policy_to_string(policy))
+            + " from=" + state->from_domain
+            + std::string((explanation.empty() ? "" : " reason=" + explanation))
+        );
 
         state->callback({
             result, policy, spf_aligned, dkim_aligned,

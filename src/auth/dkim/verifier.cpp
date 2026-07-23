@@ -1,4 +1,5 @@
 #include "verifier.hpp"
+#include "globals.hpp"
 #include <openssl/bio.h>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
@@ -301,7 +302,7 @@ namespace DKIM {
 
         // Validate the algorithm name
         if (signature.algorithm != "rsa-sha256" && signature.algorithm != "ed25519-sha256") {
-            std::cerr << "[DKIM] unsupported algorithm: " << signature.algorithm << std::endl;
+            logger.error("[DKIM] Unsupported algorithm: " + signature.algorithm);
             return std::nullopt;
         }
 
@@ -314,7 +315,7 @@ namespace DKIM {
 
         if (auto v = tags.find("v"); v != tags.end()) {
             if (v->second != "DKIM1") {
-                std::cerr << "[DKIM] unsupported key version: " << v->second << std::endl;
+                logger.error("[DKIM] Unsupported key version: " + v->second);
                 return std::nullopt;
             }
 
@@ -325,7 +326,7 @@ namespace DKIM {
         if (p == tags.end() || p->second.empty()) {
             // An empty p= key means it was revoked - RFC 6376 3.6.1
             // in rare circumstances it might be empty on receival
-            std::cerr << "[DKIM] key revoked or empty" << std::endl;
+            logger.error("[DKIM] Key revoked or empty");
             return std::nullopt;
         }
 
@@ -350,7 +351,7 @@ namespace DKIM {
 
         // validate the key type
         if (key.key_type != "rsa" && key.key_type != "ed25519") {
-            std::cerr << "[DKIM] unsupported key type: " << key.key_type << std::endl;
+            logger.error("[DKIM] Unsupported key type: " + key.key_type);
             return std::nullopt;
         }
 
@@ -635,7 +636,7 @@ namespace DKIM {
         EVP_PKEY* pub_key = d2i_PUBKEY(nullptr, &ptr, static_cast<long>(pub_key_der.size()));
 
         if (!pub_key) {
-            std::cerr << "[DKIM] failed to parse RSA public key" << std::endl;
+            logger.error("[DKIM] Failed to parse RSA public key");
             return false;
         }
 
@@ -675,7 +676,7 @@ namespace DKIM {
         );
 
         if (!pub_key) {
-            std::cerr << "[DKIM] failed to parse ED25519 public key" << std::endl;
+            logger.error("[DKIM] Failed to parse ED25519 public key");
             return false;
         }
 
@@ -704,12 +705,12 @@ namespace DKIM {
         auto itr = key_cache_.find(cached_key);
 
         if (itr != key_cache_.end()) {
-            std::cout << "[DKIM] Key Cache hit: " << cached_key << std::endl;
+            logger.info("[DKIM] Key Cache hit: " + cached_key);
             do_verify(state, itr->second);
             return;
         }
 
-        std::cout << "[DKIM] fetching key: " << cached_key << std::endl;
+        logger.info("[DKIM] Fetching key: " + cached_key);
 
         resolver_.resolve_txt(cached_key, 
             [this, state, cached_key](DNS::ResolveResult rr) mutable {
@@ -793,7 +794,7 @@ namespace DKIM {
 
         // if "l=" tag is present, warn but proceed
         if (signature.body_length >= 0) {
-            std::cerr << "[DKIM] WARNING: l= tag present, partially signed body" << std::endl;
+            logger.error("[DKIM] WARNINGL l= tag present, partially signed body");
 
             if (static_cast<size_t>(signature.body_length) < body.size()) {
                 body = body.substr(0, static_cast<size_t>(signature.body_length));
@@ -812,7 +813,7 @@ namespace DKIM {
             return;
         }
 
-        std::cout << "[DKIM] Body hash OK" << std::endl;
+        logger.info("[DKIM] Body hash OK");
 
         // Build signed header block
         std::vector<std::string> header_lines;
@@ -867,7 +868,7 @@ namespace DKIM {
         }
 
         if (ok) {
-            std::cout << "[DKIM] PASS d=" << signature.domain << " s=" << signature.selector << std::endl;
+            logger.info("[DKIM] PASS d=" + signature.domain + " s=" + signature.selector);
             finish(state, Result::Pass);
         } else {
             finish(state, Result::Fail, "Signature verification failed");
@@ -878,11 +879,12 @@ namespace DKIM {
         std::shared_ptr<VerifyState> state, Result result,
         std::string explanation
     ) {
-        std::cout << "[DKIM] result= " << result_to_string(result)
-            << " d=" << state->sig.domain << " s=" << state->sig.selector
-            << (explanation.empty() ? "" : " reason " + explanation)
-            << std::endl;
-
+        logger.info(
+            "[DKIM] result=" + std::string(result_to_string(result)) +
+            " d=" + state->sig.domain + " s=" + state->sig.signature +
+            std::string(explanation.empty() ? "" : " reason " + explanation)
+        );
+        
         state->callback({
             result, state->sig.domain, state->sig.selector,
             std::move(explanation)

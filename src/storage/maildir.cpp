@@ -18,8 +18,7 @@ bool MailDir::ensure_dirs() {
     for (const char* sub : {"tmp", "new", "cur"}) {
         fs::create_directories(base_ / sub, ec);
         if (ec) {
-            std::cerr << "[maildir] create_directories(" 
-                << (base_ / sub) << "): " << ec.message() << std::endl;
+            logger.debug("[MAILDIR] create_directories(" + std::string((base_ / sub)) + "): " + ec.message());
             
             return false;
         }
@@ -44,7 +43,7 @@ bool MailDir::deliver(
     std::tm tm_buf{};
 
     if (localtime_r(&now_t, &tm_buf) == nullptr) {
-        std::cerr << "[MailDir] localtime_r failed: " << strerror(errno) << std::endl;
+        logger.error("[MAILDIR] localtime_r failed: " + std::string(strerror(errno)));
         return false;
     }    
 
@@ -66,14 +65,13 @@ bool MailDir::deliver(
     {
         std::ofstream ofs(tmp_path, std::ios::binary | std::ios::trunc);
         if (!ofs) {
-            std::cerr << "[maildir] open(" << tmp_path << "): "
-                << strerror(errno) << std::endl;
+            logger.error("[MAILDIR] open(" + std::string(tmp_path.c_str()) + ") failed: " + std::string(strerror(errno)));
             return false;
         }
 
         ofs.write(message.data(), static_cast<std::streamsize>(message.size()));
         if (!ofs) {
-            std::cerr << "[maildir] write failed for " << tmp_path << std::endl;
+            logger.error("[MAILDIR] Write failed for: " + std::string(tmp_path.c_str()));
             return false;
         }
 
@@ -86,12 +84,13 @@ bool MailDir::deliver(
     std::filesystem::rename(tmp_path, new_path, ec);
     
     if (ec) {
-        std::cerr << "[maildir] rename to new/ failed: " << ec.message() << std::endl;
+        logger.error("[MAILDIR] Rename to new/ faield: " + ec.message());
+
         std::filesystem::remove(tmp_path, ec);
         return false;
     }
-
-    std::cout << "[maildir] delivered to " << new_path << std::endl;
+    
+    logger.info("[MAILDIR] Delivered to " + std::string(new_path.c_str()));
     return true;
 }
 
@@ -113,8 +112,7 @@ std::string MailDir::unique_filename(size_t body_size) const {
     char hostname[64] = "localhost";
 
     if (::gethostname(hostname, sizeof(hostname)) != 0) {
-        std::cerr << "[maildir] gethostname failed: " << std::strerror(errno)
-            << "; using fallback hostname 'localhost'" << std::endl;
+        logger.error("[MAILDIR] gethostname failed: " + std::string(strerror(errno)) + "; using fallback hostname 'localhost'");
     } else {
         hostname[sizeof(hostname) - 1] = '\0';
     }
