@@ -1,5 +1,5 @@
 #include "tls_conn.hpp"
-
+#include "globals.hpp"
 #include <openssl/ssl.h>
 #include <openssl/bio.h>
 #include <openssl/err.h>
@@ -13,6 +13,7 @@ TlsConn::TlsConn(SSL* ssl, PlaintextCB on_plaintext) : ssl_(ssl), on_plaintext_(
     wbio_ = BIO_new(BIO_s_mem());
 
     if (!rbio_  || !wbio_) {
+        logger.error("[FATAL] [TLS_CONN] BIO_new failed");
         throw std::runtime_error("BIO_new failed");
     }
 
@@ -31,6 +32,7 @@ std::vector<uint8_t> TlsConn::feed_encryption(std::span<const uint8_t> cipher_in
         int written = BIO_write(rbio_, cipher_in.data(), static_cast<int>(cipher_in.size()));
 
         if (written <= 0) {
+            logger.error("[FATAL] [TLS_CONN] BIO_write to rbio failed");
             throw std::runtime_error("BIO_write to rbio failed");
         }
     }
@@ -64,12 +66,11 @@ std::vector<uint8_t> TlsConn::feed_encryption(std::span<const uint8_t> cipher_in
         } else  if (err == SSL_ERROR_WANT_X509_LOOKUP) {
             continue;
         } else {	
-            // fatal error
+            // fatal error but not crashable
             char buf[256] = {};
             ERR_error_string_n(ERR_get_error(), buf, sizeof(buf));
 
-            // fatal error
-            std::cerr << "[TLS] SSL_read error: " << buf << std::endl;
+            logger.error("[FATAL] [TLS_CONN] SSL_read error: " + std::string(buf));
             break;
         }
     }
@@ -84,6 +85,7 @@ std::vector<uint8_t> TlsConn::feed_encryption(std::span<const uint8_t> cipher_in
 
 std::vector<uint8_t> TlsConn::encrypt(std::span<const uint8_t> plain_in) {
     if (!handshake_done_) {
+        logger.error("[FATAL] [TLS_CONN] encrypt called before handshake");
         throw std::logic_error("TlsConn::encrypt called before handshake");
     }
 
@@ -95,6 +97,7 @@ std::vector<uint8_t> TlsConn::encrypt(std::span<const uint8_t> plain_in) {
 
         ERR_error_string_n(ERR_get_error(), buf, sizeof(buf));
 
+        logger.error("[FATAL] [TLS_CONN] SSL_write failed (err=" + std::to_string(err) + "): " + std::string(buf));
         throw std::runtime_error(
             std::string("SSL_write failed (err=") + std::to_string(err) + "): " + buf
         );
@@ -130,7 +133,8 @@ std::vector<uint8_t> TlsConn::drive_handshake() {
 
     if (ret == 1) {
         handshake_done_ = true;
-        std::cout << "[TLS] handshake complete: " << info() << std::endl;
+        logger.debug("[TLS] Handshake completed: " + info());
+
         return out;
     }
 
@@ -144,7 +148,7 @@ std::vector<uint8_t> TlsConn::drive_handshake() {
     char buf[256] = {};
 
     ERR_error_string_n(ERR_get_error(), buf, sizeof(buf));
-    std::cerr << "[TLS] handshake error: " << buf << std::endl;
-
+    logger.error("[TLS] Handshake error:\n\t" + std::string(buf));
+    
     return out;
 }

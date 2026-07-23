@@ -1,5 +1,6 @@
 #include "imap/session.hpp"
 #include "auth/credentials/cred_store.hpp"
+#include "globals.hpp"
 #include <dirent.h>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -88,7 +89,7 @@ void IMAPSession::process_line(const std::string& line) {
         return;
     }
 
-    std::cout << "[IMAP] " << conn_id_ << " " << line << std::endl;
+    logger.info("[IMAP] " + std::to_string(conn_id_) + " " + line);
 
     std::istringstream ss(line);
     std::string tag, command;
@@ -452,7 +453,7 @@ void IMAPSession::complete_append() {
     std::ofstream out(path, std::ios::binary);
 
     if (!out) {
-        std::cerr << "[IMAP] APPEND open failed: " << std::strerror(errno) << " path=" << path << std::endl;
+        logger.error("[IMAP] APPEND open failed: " + std::string(std::strerror(errno)) + " path=" + path);
 
         no(append_tag_, "APPEND failed: could not write message");
         return;
@@ -464,9 +465,11 @@ void IMAPSession::complete_append() {
     );
     out.close();
 
-    std::cout << "[IMAP] " << conn_id_ << " appended " 
-        << literal_buf_.size() << " bytes to " 
-        << append_mailbox_ << std::endl;
+    logger.info(
+        "[IMAP] " + std::to_string(conn_id_) + " appended " 
+        + std::to_string(literal_buf_.size()) + " bytes to " 
+        + append_mailbox_ 
+    );
 
     ok(append_tag_, "APPEND completed");
 }
@@ -521,7 +524,7 @@ void IMAPSession::cmd_login(const std::string& tag, const std::string& args) {
     state_ = State::Authenticated;
     ensure_standard_folders();
     
-    std::cout << "[IMAP] " << conn_id_ << " authenticated: " << username_ << std::endl;
+    logger.info("[IMAP] " + std::to_string(conn_id_) + " authenticated: " + username_);
 
     ok(tag, "[CAPABILITY IMAP4rev1] LOGIN completed");
 }
@@ -789,7 +792,7 @@ std::vector<uint8_t> IMAPSession::read_blob(const MessageMeta& msg) const {
 
     std::ifstream file(path, std::ios::binary);
     if (!file) {
-        std::cerr << "[IMAP] failed to open path: " << path << std::endl;
+        logger.error("[IMAP] Failed to open path: " + path);
         return {};
     }
 
@@ -1101,8 +1104,7 @@ void IMAPSession::load_mailbox(const std::string& mailbox) {
         next_uuid_ = std::max(next_uuid_, messages_[i].uuid + 1);
     }
 
-    std::cout << "[IMAP] " << conn_id_ << " loaded " << messages_.size() 
-        << " messages from " << mailbox << std::endl;
+    logger.info("[IMAP] " + std::to_string(conn_id_) + " loaded " + std::to_string(messages_.size()) + " messages from " + mailbox);
 }
 
 size_t IMAPSession::scan_new() const {
@@ -1278,7 +1280,7 @@ std::vector<uint32_t> IMAPSession::parse_sequence_set(
 }
 
 void IMAPSession::send(const std::string& line) {
-    std::cout << "[IMAP] " << conn_id_ << " > " << line << std::endl;
+    logger.info("[IMAP] " + std::to_string(conn_id_) + " > " + line);
     std::string out = line + "\r\n";
 
     loop_.submit_write(conn_id_, std::vector<uint8_t>(out.begin(), out.end()));

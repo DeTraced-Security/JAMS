@@ -7,6 +7,7 @@
 #include <cstring>
 #include <iostream>
 #include <vector>
+#include "globals.hpp"
 
 namespace Auth {
     CredentialStore::CredentialStore(const std::string& db_path) {
@@ -17,6 +18,7 @@ namespace Auth {
             sqlite3_close_v2(db_);
             db_ = nullptr;
 
+            logger.error("[FATAL] [CREDSTORE] Failed to open DB: " + err);
             throw std::runtime_error("[CredStore] Failed to open DB: " + err);
         }
 
@@ -24,7 +26,7 @@ namespace Auth {
         exec("PRAGMA foreign_keys=ON");
         ensure_schema();
 
-        std::cout << "[Auth] credential store opened: " << db_path << std::endl;
+        logger.info("[AUTH] Credential Store opened: " + db_path);
     }
 
     CredentialStore::~CredentialStore() {
@@ -82,9 +84,9 @@ namespace Auth {
         sqlite3_finalize(stmt); // Construct the statement with the binds
 
         if (ok) {
-            std::cout << "[auth] user added: " << username << std::endl;
+            logger.info("[AUTH] User added: " + username);
         } else {
-            std::cerr << "[auth] add_user failed: " << sqlite3_errmsg(db_) << std::endl;
+            logger.error("[AUTH] add_user failed: " + std::string(sqlite3_errmsg(db_)));
         }
 
         return ok;
@@ -100,7 +102,7 @@ namespace Auth {
             "WHERE username = ? AND active = 1";
         
         if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
-            std::cerr << "[auth] SQL Account Verification perpare failed: " << sqlite3_errmsg(db_) << std::endl;
+            logger.error("[auth] SQL Account Verification perpare failed: " + std::string(sqlite3_errmsg(db_)));
             return false;
         }
 
@@ -263,6 +265,7 @@ namespace Auth {
         // Generate 16 random bytes for the salt
         uint8_t salt_bytes[16];
         if (RAND_bytes(salt_bytes, sizeof(salt_bytes)) != 1) {
+            logger.error("[FATAL] [AUTH] RAND_bytes failed");
             throw std::runtime_error("[auth/CredStore] RAND_bytes failed");
         }
 
@@ -288,6 +291,7 @@ namespace Auth {
         );
 
         if (rc != 1) {
+            logger.error("[FATAL] [AUTH] PBKDF2 faiiled");
             throw std::runtime_error("[auth/CredStore] PBKDF2 failed");
         }
 
@@ -352,7 +356,7 @@ namespace Auth {
         int rc = sqlite3_exec(db_, sql.c_str(), nullptr, nullptr, &err);
 
         if (rc != SQLITE_OK) {
-            std::cerr << "[auth] SQL error: " << (err ? err : "unknown") << std::endl;
+            logger.error("[AUTH] SQL Error: " + std::string((err ? err : "unknown")));
             sqlite3_free(err);
 
             return false;

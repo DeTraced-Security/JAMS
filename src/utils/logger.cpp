@@ -1,12 +1,20 @@
 #include "logger.hpp"
+#include <iostream>
+#include <filesystem>
 
-Logger::Logger(const std::string& filepath) : file_(filepath, std::ios::app) {
-    if (!file_) {
+Logger::Logger(const std::string& filepath) {
+    const std::string absolute_path = std::filesystem::weakly_canonical(filepath).string();
+    const bool is_ok = std::filesystem::is_regular_file(absolute_path);
+
+    if (!is_ok) {
         throw std::runtime_error("[logger] [ERROR]: Failed to open: " + filepath);
+        exit(1);
     }
 
+    file_ = std::ofstream(absolute_path, std::ios::app);
     worker_ = std::thread(&Logger::run, this);
 }
+
 
 Logger::~Logger() {
     shutdown();
@@ -19,6 +27,17 @@ void Logger::log(LogLevel level, std::string msg) {
             return;
         }
         queue_.push_back(format(level, std::move(msg)));
+    }
+
+    // Copy to stdout for info and error
+    switch (level) {
+        case LogLevel::Info: {
+            std::cout << "\001b[34m" << msg.c_str() << "\033[0m" << std::endl;
+            break;
+        }
+        case LogLevel::Error: {
+            std::cerr << "\033[31m" << msg.c_str() << "\033[0m" << std::endl;
+        }
     }
 
     cv_.notify_one();

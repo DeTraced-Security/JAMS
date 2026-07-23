@@ -81,7 +81,7 @@ void SMTPSession::process_line(std::string_view line) {
         c = static_cast<char>(std::toupper(c));
     }
 
-    std::cout << "[smtp: " << conn_id_ << "]" << line << std::endl;
+    logger.debug("[SMTP] " + std::to_string(conn_id_) + std::string(line));
 
     if (verb == "EHLO") {
         cmd_ehlo(arg);
@@ -241,7 +241,8 @@ bool SMTPSession::deliver() {
 
         MailDir mdir(get_mailroot() + local);
         if (!mdir.deliver(env_.mail_from, rcpt, env_.body)) {
-            std::cerr << "[deliver] failed for " << rcpt << std::endl;
+            logger.error("[DELIVER] Failed for: " + rcpt);
+
             all_ok = false;
         }
     }
@@ -253,7 +254,7 @@ void SMTPSession::reply(std::string_view text) {
     std::string line(text);
     line += "\r\n";
     
-    std::cout << "[smtp:" << conn_id_ << "] > " << text << std::endl;
+    logger.debug("[SMTP] " + std::to_string(conn_id_) + " > " + std::string(text));
 
     std::vector<uint8_t> buf(line.begin(), line.end());
     loop_.submit_write(conn_id_, std::move(buf));
@@ -278,7 +279,10 @@ void SMTPSession::reply_multiline(
         out += "\r\n";
     }
 
-    std::cout << "[smtp:" << conn_id_ << "] > " << code_str << " (multiline, " << lines.size() << " lines)\n";
+    logger.debug(
+        "[SMTP] " + std::to_string(conn_id_) + " > " + code_str 
+        + " (multiline, " + std::to_string(lines.size()) + " lines)"
+    );
 
     std::vector<uint8_t> buf(out.begin(), out.end());
     loop_.submit_write(conn_id_, std::move(buf));
