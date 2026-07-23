@@ -5,6 +5,7 @@
 #include "imap/session.hpp"
 #include "config/toml_parse.hpp"
 #include "globals.hpp"
+#include "auth/credentials/aliases.hpp"
 #include <csignal>
 #include <cstring>
 #include <stdexcept>
@@ -116,6 +117,9 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    
+    Aliases aliases(cred_store);
+
     // SMTP inbound loop
     logger.info("[JAMS] Starting SMTP inbound on port: " + cfg.smtp_port);
     logger.info("[JAMS] Hostname: " + JAMS_HOSTNAME);
@@ -125,8 +129,8 @@ int main(int argc, char* argv[]) {
 
     std::thread smtp_thread([&]() {
         try {
-            IoUringLoop smtp_loop(cfg.smtp_port, [](uint64_t id, const std::string& ip, IoUringLoop& loop) {
-                return std::make_unique<SMTPSession>(id, ip, loop);
+            IoUringLoop smtp_loop(cfg.smtp_port, [&aliases](uint64_t id, const std::string& ip, IoUringLoop& loop) {
+                return std::make_unique<SMTPSession>(id, ip, loop, aliases);
             });
             smtp_loop.run();
         } catch (const std::exception& ex) {
@@ -138,8 +142,8 @@ int main(int argc, char* argv[]) {
 
     std::thread submission_thread([&]() {
         try {
-            IoUringLoop submission_loop(cfg.submission_port, [&cred_store](uint64_t id, const std::string& ip, IoUringLoop& loop) {
-                return std::make_unique<SubmissionServer>(id, ip, loop, cred_store);
+            IoUringLoop submission_loop(cfg.submission_port, [&cred_store, &aliases](uint64_t id, const std::string& ip, IoUringLoop& loop) {
+                return std::make_unique<SubmissionServer>(id, ip, loop, cred_store, aliases);
             });
             submission_loop.run();
         } catch(const std::exception& ex) {
@@ -151,7 +155,7 @@ int main(int argc, char* argv[]) {
 
     std::thread imap4_thread([&]() {
         try {
-            IoUringLoop imap4_loop(cfg.imap4_port, [&cred_store](uint64_t id, const std::string& ip, IoUringLoop& loop) {
+            IoUringLoop imap4_loop(cfg.imap4_port, [&cred_store, &aliases](uint64_t id, const std::string& ip, IoUringLoop& loop) {
                 return std::make_unique<IMAPSession>(id, ip, loop, cred_store, get_mailroot());
             });
             imap4_loop.run();

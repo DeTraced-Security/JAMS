@@ -1,3 +1,5 @@
+#pragma once
+
 #include "cred_store.hpp"
 #include "config/toml_parse.hpp"
 
@@ -23,7 +25,7 @@ class Aliases {
         /// @param expiry 
         /// @param receives_from 
         /// @return 
-        bool add(const std::string& alias, const std::string& username, const AliasPolicy& policy = {});
+        bool add(const std::string& alias, const std::string& username, const AliasPolicy& policy);
         
         /// @brief 
         /// @param alias 
@@ -53,4 +55,6 @@ class Aliases {
 
     private:
         sqlite3* db_; // Borrowing from CredStore
+        
+        void deactivate(const std::string& alias);
 };

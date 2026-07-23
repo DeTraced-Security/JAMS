@@ -61,6 +61,81 @@ bool Aliases::add(
     return ok;
 }
 
+bool Aliases::accept_and_consume(const std::string& alias) {
+    static constexpr const char* SEL =
+        "SELECT active, expires_at, max_uses, uses_count "
+        "FROM aliases WHERE alias = ?;";
+
+    sqlite3_stmt* stmt{nullptr};
+    if (sqlite3_prepare_v2(db_, SEL, -1, &stmt, nullptr) != SQLITE_OK) {
+        logger.error("[ALIAS] accept_and_consume prepare failed: " + std::string(sqlite3_errmsg(db_)));
+        return false;
+    }
+    sqlite3_bind_text(stmt, 1, alias.c_str(), -1, SQLITE_TRANSIENT);
+
+    if (sqlite3_step(stmt) != SQLITE_ROW) {
+        sqlite3_finalize(stmt);
+        return false; // not an alias at all
+    }
+
+    bool active         = sqlite3_column_int(stmt, 0) != 0;
+    bool has_expiry     = sqlite3_column_type(stmt, 1) != SQLITE_NULL;
+    int64_t expires_at  = has_expiry ? sqlite3_column_int64(stmt, 1) : 0;
+    bool has_max_uses   = sqlite3_column_type(stmt, 2) != SQLITE_NULL;
+    int max_uses        = has_max_uses ? sqlite3_column_int(stmt, 2) : 0;
+    int uses_count      = sqlite3_column_int(stmt, 3);
+    sqlite3_finalize(stmt);
+
+    int64_t now = static_cast<int64_t>(std::time(nullptr));
+
+    bool expired = !active
+                || (has_expiry && now >= expires_at)
+                || (has_max_uses && uses_count >= max_uses);
+
+    if (expired) {
+        // deactivate — idempotent, harmless if already inactive
+        static constexpr const char* DEACT = "UPDATE aliases SET active = 0 WHERE alias = ?;";
+        sqlite3_stmt* d{nullptr};
+        sqlite3_prepare_v2(db_, DEACT, -1, &d, nullptr);
+        sqlite3_bind_text(d, 1, alias.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_step(d);
+        sqlite3_finalize(d);
+        return false;
+    }
+
+    static constexpr const char* UPD =
+        "UPDATE aliases SET uses_count = uses_count + 1 WHERE alias = ?;";
+    sqlite3_stmt* upd{nullptr};
+    sqlite3_prepare_v2(db_, UPD, -1, &upd, nullptr);
+    sqlite3_bind_text(upd, 1, alias.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_step(upd);
+    sqlite3_finalize(upd);
+
+    if (has_max_uses && uses_count + 1 >= max_uses) {
+        static constexpr const char* DEACT = "UPDATE aliases SET active = 0 WHERE alias = ?;";
+        sqlite3_stmt* d{nullptr};
+        sqlite3_prepare_v2(db_, DEACT, -1, &d, nullptr);
+        sqlite3_bind_text(d, 1, alias.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_step(d);
+        sqlite3_finalize(d);
+    }
+
+    return true;
+}
+
+// aliases.cpp
+void Aliases::deactivate(const std::string& alias) {
+    static constexpr const char* SQL = "UPDATE aliases SET active = 0 WHERE alias = ?;";
+    sqlite3_stmt* stmt{nullptr};
+    if (sqlite3_prepare_v2(db_, SQL, -1, &stmt, nullptr) != SQLITE_OK) {
+        logger.error("[ALIAS] deactivate prepare failed: " + std::string(sqlite3_errmsg(db_)));
+        return;
+    }
+    sqlite3_bind_text(stmt, 1, alias.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+}
+
 bool Aliases::remove(const std::string& alias) {
     static constexpr const char* SQL = "DELETE FROM aliases WHERE alias = ?;";
     sqlite3_stmt* stmt{nullptr};

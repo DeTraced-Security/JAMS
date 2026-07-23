@@ -5,7 +5,7 @@
 #include "auth/dkim/signer.hpp"
 #include "io/session_factory.hpp"
 #include "smtp_session.hpp"
-#include "aliases.hpp"
+#include "auth/credentials/aliases.hpp"
 #include <cstdint>
 #include <memory>
 #include <span>
