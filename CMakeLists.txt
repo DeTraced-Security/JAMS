@@ -60,6 +60,7 @@ set(SOURCES
     src/auth/dkim/verifier.cpp
     src/auth/dkim/signer.cpp
     src/auth/credentials/cred_store.cpp
+    src/auth/credentials/aliases.cpp
 
     src/smtp/submission_server.cpp
     src/smtp/smtp_session.cpp

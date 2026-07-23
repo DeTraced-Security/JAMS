@@ -45,6 +45,16 @@ namespace Auth {
                 active INTEGER NOT NULL DEFAULT 1,
                 created_at INTEGER NOT NULL
             );
+
+            CREATE TABLE aliases (
+                alias TEXT PRIMARY KEY, -- full address
+                username TEXT NOT NULL, -- target account
+                active INTEGER NOT NULL DEFAULT 1,
+                created_at INTEGER NOT NULL,
+                FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE
+            );
+
+            CREATE INDEX idx_aliases_username ON aliases(username);
         )sql");
     }
 
