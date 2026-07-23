@@ -103,15 +103,15 @@ void IoUringLoop::setup_listen_socket() {
     }
 
     if (port_ == 25) {
-        logger.info("[SMTP] Listening on port: " + port_);
+        logger.info("[SMTP] Listening on port: " + std::to_string(port_));
     } else if (port_ == 587) {
-        logger.info("[SUBMISSION] Listening on port: " + port_);
+        logger.info("[SUBMISSION] Listening on port: " + std::to_string(port_));
     } else if(port_ == 143) {
-        logger.info("[IMAP4] Listening on port: " + port_);
+        logger.info("[IMAP4] Listening on port: " + std::to_string(port_));
     } else if (port_ == 993) {
-        logger.info("[IMAP4S] Listening on port: " + port_);
+        logger.info("[IMAP4S] Listening on port: " + std::to_string(port_));
     } else {
-        logger.info("[CUSTOMPORT] Listening on port: " + port_);
+        logger.info("[CUSTOMPORT] Listening on port: " + std::to_string(port_));
     }
 }
 

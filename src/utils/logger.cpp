@@ -38,6 +38,9 @@ void Logger::log(LogLevel level, std::string msg) {
         case LogLevel::Error: {
             std::cerr << "\033[31m" << msg.c_str() << "\033[0m" << std::endl;
         }
+        default: {
+            break;
+        }
     }
 
     cv_.notify_one();
