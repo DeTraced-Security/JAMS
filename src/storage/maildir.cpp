@@ -27,13 +27,13 @@ bool MailDir::ensure_dirs() {
     return true;
 }
 
-bool MailDir::deliver(
+std::optional<std::string> MailDir::deliver(
     const std::string& mail_from,
     const std::string& rcpt_to, 
     const std::string& body
 ) {
     if (!ensure_dirs()) {
-        return false;
+        return "";
     }
 
     // Building the mesasge
@@ -44,7 +44,7 @@ bool MailDir::deliver(
 
     if (localtime_r(&now_t, &tm_buf) == nullptr) {
         logger.error("[MAILDIR] localtime_r failed: " + std::string(strerror(errno)));
-        return false;
+        return "";
     }    
 
     // RFC-2822 date format:
@@ -66,13 +66,13 @@ bool MailDir::deliver(
         std::ofstream ofs(tmp_path, std::ios::binary | std::ios::trunc);
         if (!ofs) {
             logger.error("[MAILDIR] open(" + std::string(tmp_path.c_str()) + ") failed: " + std::string(strerror(errno)));
-            return false;
+            return "";
         }
 
         ofs.write(message.data(), static_cast<std::streamsize>(message.size()));
         if (!ofs) {
             logger.error("[MAILDIR] Write failed for: " + std::string(tmp_path.c_str()));
-            return false;
+            return "";
         }
 
         ofs.flush();
@@ -87,11 +87,11 @@ bool MailDir::deliver(
         logger.error("[MAILDIR] Rename to new/ faield: " + ec.message());
 
         std::filesystem::remove(tmp_path, ec);
-        return false;
+        return "";
     }
     
     logger.info("[MAILDIR] Delivered to " + std::string(new_path.c_str()));
-    return true;
+    return std::string(new_path.c_str());
 }
 
 // Filename Generation

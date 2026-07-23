@@ -5,6 +5,7 @@
 #include "auth/dkim/signer.hpp"
 #include "io/session_factory.hpp"
 #include "smtp_session.hpp"
+#include "aliases.hpp"
 #include <cstdint>
 #include <memory>
 #include <span>
@@ -31,7 +32,8 @@ class SubmissionServer : public Session {
     public:
         SubmissionServer(
             uint64_t conn_id, const std::string& remote_ip,
-            IoUringLoop& loop, Auth::CredentialStore& store
+            IoUringLoop& loop, Auth::CredentialStore& store,
+            Aliases& aliases
         );
 
         /// @brief Called by io_uring when bytes arrive
@@ -126,6 +128,7 @@ class SubmissionServer : public Session {
         std::string remote_ip_;
         IoUringLoop& loop_;
         Auth::SASLSession sasl_;
+        Aliases& aliases_;
 
         /// @brief Submission States
         enum class State {

@@ -16,7 +16,7 @@ class MailDir {
         /// @param rcpt_to 
         /// @param body 
         /// @return 
-        bool deliver(const std::string& mail_from,
+        std::optional<std::string> deliver(const std::string& mail_from,
             const std::string& rcpt_to,
             const std::string& body);
         

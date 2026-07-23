@@ -49,6 +49,8 @@ class Aliases {
 
         void mark_purged(int64_t queue_id);
 
+        static std::string extract_domain(const std::string& address);
+
     private:
         sqlite3* db_; // Borrowing from CredStore
 };

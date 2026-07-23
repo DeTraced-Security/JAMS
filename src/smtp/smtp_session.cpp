@@ -11,8 +11,8 @@
 
 SMTPSession::SMTPSession(
     uint64_t conn_id, std::string remote_ip, 
-    IoUringLoop& loop
-): conn_id_(conn_id), remote_ip_(remote_ip), loop_(loop) {
+    IoUringLoop& loop, Aliases& aliases
+): conn_id_(conn_id), remote_ip_(remote_ip), loop_(loop), aliases_(aliases) {
     // RFC-5321 4.2: Send 220 Banner on connect
     reply_code(220, get_hostname() + " ESMTP mailserver/0.1");
     state_ = SMTPState::Greeted; // Wait for EHLO
@@ -178,6 +178,23 @@ void SMTPSession::cmd_rcpt(std::string_view arg) {
         return;
     }
 
+    std::string resolved = aliases_.resolve(addr);
+    bool is_alias = (resolved != addr);
+
+    if (is_alias) {
+        if (!aliases_.accept_and_consume(addr)) {
+            reply_code(550, "Mailbox unavailable");
+            return;
+        }
+        
+        std::string sender_domain = Aliases::extract_domain(env_.mail_from);
+        if (!aliases_.is_domain_allowed(addr, sender_domain)) {
+            logger.info("[SMTP] Rejected " + env_.mail_from + " -> " + addr + " (sender domain not allowed)");
+            reply_code(550, "Mailbox unavailable");
+            return;
+        }
+    }
+
     env_.rcpt_to.push_back(addr);
     state_ = SMTPState::RCPT;
     reply_code(250, "OK");
@@ -237,13 +254,18 @@ bool SMTPSession::deliver() {
     for (const auto& rcpt : env_.rcpt_to) {
         // Extract local/account name (before @)
         auto at = rcpt.find('@');
-        std::string local = (at != std::string::npos) ? rcpt.substr(0, at) : rcpt;
+        std::string target = aliases_.resolve(rcpt);
+        std::string mailbox_user = (at != std::string::npos) ? target.substr(0, at) : target;
 
-        MailDir mdir(get_mailroot() + local);
-        if (!mdir.deliver(env_.mail_from, rcpt, env_.body)) {
+        MailDir mdir(get_mailroot() + mailbox_user);
+        auto stored_path = mdir.deliver(env_.mail_from, rcpt, env_.body);
+        if (stored_path == "") {
             logger.error("[DELIVER] Failed for: " + rcpt);
-
             all_ok = false;
+        }
+
+        if (target != rcpt) {
+            aliases_.schedule_purge(rcpt, mailbox_user, *stored_path);
         }
     }
 

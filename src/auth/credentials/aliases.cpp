@@ -2,7 +2,7 @@
 #include <ctime>
 #include "globals.hpp"
 
-std::string extract_domain(const std::string& address) {
+std::string Aliases::extract_domain(const std::string& address) {
     auto pos = address.rfind('@');
     if (pos == std::string::npos) {
         return "";

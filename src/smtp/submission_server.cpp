@@ -14,12 +14,13 @@
 
 SubmissionServer::SubmissionServer(
     uint64_t conn_id, const std::string& remote_ip,
-    IoUringLoop& loop, Auth::CredentialStore& store
+    IoUringLoop& loop, Auth::CredentialStore& store,
+    Aliases& aliases
 ) : dkim_signer_({
         .domain = get_hostname(),
         .selector = "jams",
         .priv_key_path = "/etc/jams/tls/key.pem"
-    }), conn_id_(conn_id), remote_ip_(remote_ip), loop_(loop), sasl_(store) {
+    }), conn_id_(conn_id), remote_ip_(remote_ip), loop_(loop), sasl_(store), aliases_(aliases) {
         reply(220, get_hostname() + " ESMTP submission");
 }
 
@@ -269,6 +270,23 @@ void SubmissionServer::cmd_rcpt(std::string_view arg) {
         return;
     }
 
+    std::string resolved = aliases_.resolve(addr);
+    bool is_alias = (resolved != addr);
+
+    if (is_alias) {
+        if (!aliases_.accept_and_consume(addr)) {
+            reply(550, "Mailbox unavailable");
+            return;
+        }
+
+        std::string sender_domain = Aliases::extract_domain(env_.mail_from);
+        if (!aliases_.is_domain_allowed(addr, sender_domain)) {
+            logger.info("[SUBMISSION] Rejected " + env_.mail_from + " -> " + addr + " (sender domain not allowed)");
+            reply(550, "Mailbox unavailable");
+            return;
+        }
+    }
+
     env_.rcpt_to.push_back(addr);
     state_ = State::Rcpt;
     reply(250, "OK");
@@ -316,10 +334,23 @@ bool SubmissionServer::deliver() {
         std::string local = (at != std::string::npos) ? rcpt.substr(0, at) : rcpt;
 
         if (domain.empty() || domain == get_hostname()) {
+            std::string target = aliases_.resolve(rcpt);
+            std::string mailbox_user = target;
+
+            auto tat = mailbox_user.find('@');
+            if (tat != std::string::npos) {
+                mailbox_user = mailbox_user.substr(0, tat);
+            }
+
             MailDir mdir(get_mailroot() + local);
-            if (!mdir.deliver(env_.mail_from, rcpt, env_.body)) {
+            auto stored_path = mdir.deliver(env_.mail_from, rcpt, env_.body);
+            if (stored_path == "") {
                 logger.error("[DELIVER] Failed for: " + rcpt);
                 all_ok = false;
+            }
+
+            if (target != rcpt) {
+                aliases_.schedule_purge(rcpt, mailbox_user, *stored_path);
             }
         } else {
             if (!relay_outbound(env_.mail_from, rcpt, domain, env_.body)) {
