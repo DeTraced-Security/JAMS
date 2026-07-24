@@ -1,5 +1,6 @@
 #include "toml_parse.hpp"
 #include "globals.hpp"
+#include <format>
 #include <filesystem>
 
 TOMLParser::TOMLParser(const std::string path) {
