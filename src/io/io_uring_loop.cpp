@@ -238,7 +238,7 @@ void IoUringLoop::run() {
         io_uring_cq_advance(&ring_, nr);
     }
 
-    logger.info("[IO_URING] Loop exiting on port: " + port_);
+    logger.info("[IO_URING] Loop exiting on port: " + std::to_string(port_));
 }
 
 void IoUringLoop::on_accept(int /*fd*/, int res) {

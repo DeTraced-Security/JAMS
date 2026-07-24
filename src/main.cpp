@@ -72,7 +72,7 @@ int main(int argc, char* argv[]) {
     }
 
     Config cfg;
-
+    
     for (auto& p : configs) {
         if (p.first == "smtp") {
             cfg.smtp_port = std::stoi(p.second);
@@ -85,6 +85,9 @@ int main(int argc, char* argv[]) {
         }
         if (p.first == "submissions") {
             cfg.submission_port = std::stoi(p.second);
+        }
+        if (p.first == "db_path") {
+            cfg.db_path = p.second;
         }
     }
 

@@ -11,10 +11,7 @@ class TOMLParser {
         explicit TOMLParser(const std::string path);
         ~TOMLParser();
 
-        static void error(const char* msg) {
-            std::fprintf(stderr, "[TOML] ERROR: %s\n", msg);
-            return;
-        };
+        static void error(const char* msg);
 
         std::unordered_map<std::string, std::string> fetch_configs();
 

@@ -26,13 +26,17 @@ void Logger::log(LogLevel level, std::string msg) {
         if (stopping_) {
             return;
         }
-        queue_.push_back(format(level, std::move(msg)));
+        queue_.push_back(format(level, msg));
+    }
+
+    if (msg.empty()) {
+        return;
     }
 
     // Copy to stdout for info and error
     switch (level) {
         case LogLevel::Info: {
-            std::cout << "\001b[34m" << msg.c_str() << "\033[0m" << std::endl;
+            std::cout << "\033[34m" << msg.c_str() << "\033[0m" << std::endl;
             break;
         }
         case LogLevel::Error: {
