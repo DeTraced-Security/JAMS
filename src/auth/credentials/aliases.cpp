@@ -36,10 +36,10 @@ std::string Aliases::resolve(const std::string& address) {
 }
 
 bool Aliases::add(
-    const std::string& alias, const std::string& username, const AliasPolicy& policy = {}
+    const std::string& alias, const std::string& username, const AliasPolicy& policy
 ) {
-    static constexpr const char* SQL = "INSERT INTO aliases (alias, username, active, created_at) "
-        "VALUES (?, ?, 1, ?);";
+    static constexpr const char* SQL = "INSERT INTO aliases (alias, username, active, max_uses, expires_at, created_at) "
+        "VALUES (?, ?, 1, ?, ?, ?);";
     
     sqlite3_stmt* stmt{nullptr};
 
@@ -50,7 +50,9 @@ bool Aliases::add(
 
     sqlite3_bind_text(stmt, 1, alias.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_text(stmt, 2, username.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_int64(stmt, 3, static_cast<sqlite3_int64>(std::time(nullptr)));
+    sqlite3_bind_int(stmt, 3, policy.max_uses.value());
+    sqlite3_bind_int64(stmt, 4, policy.expires_at.value());
+    sqlite3_bind_int64(stmt, 5, static_cast<sqlite3_int64>(std::time(nullptr)));
 
     bool ok = sqlite3_step(stmt) == SQLITE_DONE;
     if (!ok) {
