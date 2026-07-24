@@ -1,6 +1,7 @@
 #pragma once
 
 #include "io/session_factory.hpp"
+#include "auth/credentials/aliases.hpp"
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -32,7 +33,7 @@ class SMTPSession : public Session {
         SMTPSession(
             uint64_t conn_id,
             std::string remote_ip,
-            IoUringLoop& loop
+            IoUringLoop& loop, Aliases& aliases
         );
 
         /// @brief Handles events that receive on-wire data
@@ -115,6 +116,7 @@ class SMTPSession : public Session {
         uint64_t conn_id_;
         std::string remote_ip_;
         IoUringLoop& loop_;
+        Aliases& aliases_;
 
         SMTPState state_{SMTPState::Connected};
         std::string line_buf;

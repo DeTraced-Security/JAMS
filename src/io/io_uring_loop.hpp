@@ -4,6 +4,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <cstdint>
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <unordered_map>
@@ -20,7 +21,8 @@ enum class op_type : uint8_t {
     Accept = 0,
     Read = 1,
     Write = 2,
-    Close = 3
+    Close = 3,
+    Timer = 4,
 };
 
 /// @brief Encodes data to ensure integrity and avoid dangling references
@@ -97,7 +99,19 @@ class IoUringLoop {
             return itr != tls_conns_.end() && itr->second->handshake_done();
         }
 
+        void arm_periodic_timer(std::chrono::seconds interval, std::function<void()> callback);
+
     private:
+        struct PeriodicTimer {
+            __kernel_timespec ts;
+            std::function<void()> callback;
+        };
+
+        std::unordered_map<uint64_t, PeriodicTimer> timers_;
+        uint64_t timer_next_id_ = 1;
+
+        void on_timer(uint64_t timer_id, int res);
+
         /// @brief Sets up the server listening socket 
         void setup_listen_socket();
 

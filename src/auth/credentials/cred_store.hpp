@@ -78,6 +78,10 @@ namespace Auth {
             /// @return 
             bool user_exists(const std::string& username);
 
+            sqlite3* handle() const {
+                return db_;
+            }
+
         private:
             struct HashedPassword {
                 std::string hash; // base64 encoded SHA256
