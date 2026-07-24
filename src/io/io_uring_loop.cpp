@@ -70,7 +70,51 @@ IoUringLoop::~IoUringLoop() {
     }
 }
 
-void IoUringLoop::setup_listen_socket() {
+void IoUringLoop::arm_periodic_timer(std::chrono::seconds interval, std::function<void()> callback) {
+    uint64_t timer_id = timer_next_id_++;
+
+    __kernel_timespec ts{};
+    ts.tv_nsec = 0;
+    ts.tv_sec = interval.count();
+
+    auto [itr, _] = timers_.try_emplace(timer_id, PeriodicTimer{ts, std::move(callback)});
+
+    io_uring_sqe* sqe = get_sqe();
+    io_uring_prep_timeout(sqe, &itr->second.ts, 0, 0);
+    sqe->user_data = encode_userdata(op_type::Timer, timer_id);
+    submit();
+}
+
+void IoUringLoop::on_timer(uint64_t timer_id, int res) {
+    auto itr = timers_.find(timer_id);
+    if (itr == timers_.end()) {
+        return;
+    }
+
+    // -ETIME is the expected result
+    if (res != -ETIME) {
+        if (res < 0 && res != -ECANCELED) {
+            logger.error("[TIMER] [IO_URING] id=" + std::to_string(timer_id) + " error: " + std::string(strerror(-res)));
+        }
+
+        return;
+    }
+
+    itr->second.callback();
+
+    if (g_shutdown) {
+        return; // don't rearm
+    }
+
+    io_uring_sqe* sqe = get_sqe();
+    io_uring_prep_timeout(sqe, &itr->second.ts, 0, 0);
+    sqe->user_data = encode_userdata(op_type::Timer, timer_id);
+
+    submit();
+}
+
+void IoUringLoop::setup_listen_socket()
+{
     listen_fd_ = ::socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
     if (listen_fd_ < 0) {
         logger.error("[FATA] [IO_URING] socket(): " + std::string(strerror(errno)));
@@ -184,6 +228,9 @@ void IoUringLoop::run() {
                     break;
                 case op_type::Close:
                     submit_close(conn_id);
+                    break;
+                case op_type::Timer: 
+                    on_timer(conn_id, res);
                     break;
             }
         }

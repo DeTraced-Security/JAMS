@@ -132,6 +132,19 @@ int main(int argc, char* argv[]) {
             IoUringLoop smtp_loop(cfg.smtp_port, [&aliases](uint64_t id, const std::string& ip, IoUringLoop& loop) {
                 return std::make_unique<SMTPSession>(id, ip, loop, aliases);
             });
+
+            smtp_loop.arm_periodic_timer(std::chrono::seconds(60), [&aliases]() {
+                aliases.reap_expired();
+
+                for (auto& [id, path] : aliases.due_purges()) {
+                    if (std::remove(path.c_str()) == 0) {
+                        aliases.mark_purged(id);
+                    } else {
+                        logger.error("[PURGE] Failed to remove: " + path);
+                    }
+                }
+            });
+
             smtp_loop.run();
         } catch (const std::exception& ex) {
             logger.error("[FATAL] [JAMS] SMTP Loop: " + std::string(ex.what()));

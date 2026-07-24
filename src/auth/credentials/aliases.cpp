@@ -2,7 +2,8 @@
 #include <ctime>
 #include "globals.hpp"
 
-std::string Aliases::extract_domain(const std::string& address) {
+std::string Aliases::extract_domain(const std::string &address)
+{
     auto pos = address.rfind('@');
     if (pos == std::string::npos) {
         return "";
@@ -251,4 +252,69 @@ void Aliases::schedule_purge(const std::string& alias, const std::string& userna
 
     sqlite3_step(ins);
     sqlite3_finalize(ins);
+}
+
+void Aliases::reap_expired() {
+    int64_t now = static_cast<int64_t>(std::time(nullptr));
+    static constexpr const char* SQL = "UPDATE aliases SET active = 0 "
+        "WHERE active = 1 AND ("
+        "  (expires_at IS NOT NULL AND expires_at <= ?) OR "
+        "  (max_uses IS NOT NULL AND uses_count >= max_uses)"
+        ");";
+    sqlite3_stmt* stmt{nullptr};
+
+    if (sqlite3_prepare_v2(db_, SQL, -1, &stmt, nullptr) != SQLITE_OK) {
+        logger.error("[ALIAS] reap_expired failed to prepare: " + std::string(sqlite3_errmsg(db_)));
+        return;
+    }
+
+    sqlite3_bind_int64(stmt, 1, now);
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+
+    return;
+}
+
+std::vector<std::tuple<int64_t, std::string>> Aliases::due_purges() {
+    int64_t now  = static_cast<int64_t>(std::time(nullptr));
+
+    static constexpr const char* SQL = "SELECT id, maildir_path FROM message_purge_queue WHERE purge_at <= ?;";
+    sqlite3_stmt* stmt{nullptr};
+    std::vector<std::tuple<int64_t, std::string>> out{};
+
+    if (sqlite3_prepare_v2(db_, SQL, -1, &stmt, nullptr) != SQLITE_OK) {
+        logger.error("[ALIAS] due_purges prepare failed: " + std::string(sqlite3_errmsg(db_)));
+        return out;
+    }
+
+    sqlite3_bind_int64(stmt, 1, now);
+
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        int64_t id = sqlite3_column_int64(stmt, 0);
+        std::string path = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+        out.emplace_back(id, path);
+    }
+
+    sqlite3_finalize(stmt);
+    return out;
+}
+
+void Aliases::mark_purged(int64_t queue_id) {
+    static constexpr const char* SQL = "DELETE FROM message_purge_queue WHERE id = ?;";
+    sqlite3_stmt* stmt{nullptr};
+
+    if (sqlite3_prepare_v2(db_, SQL, -1, &stmt, nullptr) != SQLITE_OK) {
+        logger.error("[ALAIS] mark_purged prepare failed: " + std::string(sqlite3_errmsg(db_)));
+        return;
+    }
+
+    sqlite3_bind_int64(stmt, 1, queue_id);
+
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+        logger.error("[ALIAS] mark_purged delete failed: " + std::string(sqlite3_errmsg(db_)));
+        return;
+    }
+
+    sqlite3_finalize(stmt);
+    return;
 }
