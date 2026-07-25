@@ -48,6 +48,9 @@ jobs:
               run: pip install -r tests/integration/requirements.txt
 
             - name: Debug test discovery
+              env:
+                  JAMS_BIN: ${{github.workspace}}/build/mailserver
+                  JAMS_CONFIG: /tmp/jams/config/server.toml
               run: |
                 echo "--- contents of tests/integration ---"
                 find tests/integration -type f 2>&1 || echo "directory does not exist"
@@ -55,10 +58,10 @@ jobs:
                 python3 -m pytest tests/integration --collect-only -q
 
             - name: Run integration & Security Test
-              run: python3 -m pytest tests/integration -v --tb=short
               env:
-                JAMS_BIN: ${{github.workspace}}/build/mailserver
-                JAMS_CONFIG: /tmp/jams/config/server.toml
+                  JAMS_BIN: ${{github.workspace}}/build/mailserver
+                  JAMS_CONFIG: /tmp/jams/config/server.toml
+              run: python3 -m pytest tests/integration -v --tb=short
             
             - name: Upload server logs on failure
               if: failure()
