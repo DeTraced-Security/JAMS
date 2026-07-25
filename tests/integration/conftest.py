@@ -52,7 +52,7 @@ def jams_server():
 @pytest.fixture(scope="session", autouse=True)
 def seed_test_user():
     subprocess.run(
-        [JAMS_BIN, "--add-user", "ci-test-user", "ci-test-password"],
+        ["sudo", JAMS_BIN, "--add-user", "ci-test-user", "ci-test-password"],
         check=True,
         cwd=os.path.dirname(JAMS_CONFIG)
     )
