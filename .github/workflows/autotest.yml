@@ -40,8 +40,9 @@ jobs:
             - name: Setup test config
               run: |
                 mkdir -p /tmp/jams/{db,mail,tls,config}
-                cp tests/fixtures/tls/cert.pem /tmp/jams/tls/
-                cp tests/fixtures/tls/key.pem /tmp/jams/tls/
+                mkdir -p /etc/jams/tls
+                cp tests/fixtures/tls/cert.pem /etc/jams/tls/
+                cp tests/fixtures/tls/key.pem /etc/jams/tls/
                 envsubst < tests/fixtures/server.toml.ci > /tmp/jams/config/server.toml
 
             - name: Install test dependencies
