@@ -17,7 +17,7 @@ def wait_for_port(port, timeout=10):
             time.sleep(0.1)
     return False
 
-@pytest.ficture(scope="session")
+@pytest.fixture(scope="session")
 def jams_server():
     proc = subprocess.Popen(
         [JAMS_BIN],
