@@ -14,9 +14,9 @@ inline std::string resolve_path(const char* env, const char* fallback) {
     return fallback;
 }
 
-inline TOMLParser load_configs{resolve_path("JAMS_LOG_PATH", "../config/server.toml")};
+inline TOMLParser load_configs{resolve_path("JAMS_CONFIG", "../config/server.toml")};
 inline const auto configs = load_configs.fetch_configs();
-inline Logger logger{resolve_path("JAMS_CONFIG", "../logs/jams.txt")};
+inline Logger logger{resolve_path("JAMS_LOG_PATH", "../logs/jams.txt")};
 
 inline std::string get_hostname() {
     std::string result{};
