@@ -1,7 +1,17 @@
-import subprocess, socket, time, os, signal, pytest
+import subprocess, socket, time, os, signal, pytest, sys
 
-JAMS_BIN = os.environ["JAMS_BIN"]
-JAMS_CONFIG = os.environ["JAMS_CONFIG"]
+def _require_env(name: str) -> str:
+    val = os.environ.get(name)
+    if not val:
+        sys.exit(
+            f"Missing required environment variable: {name}\n"
+            f"Set it before running the integration suite, e.g.:\n"
+            f"  JAMS_BIN=/path/to/mailserver JAMS_CONFIG=/path/to/server.toml pytest tests/integration"
+        )
+    return val
+
+JAMS_BIN = _require_env("JAMS_BIN")
+JAMS_CONFIG = _require_env("JAMS_CONFIG")
 PORTS = {
     "smtp": 2525, "submission": 2587,
     "imap4": 2143, "imap4s": 2993
