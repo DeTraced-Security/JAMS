@@ -47,6 +47,13 @@ jobs:
             - name: Install test dependencies
               run: pip install -r tests/integration/requirements.txt
 
+            - name: Debug test discovery
+              run: |
+                echo "--- contents of tests/integration ---"
+                find tests/integration -type f 2>&1 || echo "directory does not exist"
+                echo "--- pytest collect-only ---"
+                python3 -m pytest tests/integration --collect-only -q
+
             - name: Run integration & Security Test
               run: python3 -m pytest tests/integration -v --tb=short
               env:
