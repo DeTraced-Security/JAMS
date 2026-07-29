@@ -30,7 +30,7 @@ def wait_for_port(port, timeout=10):
 @pytest.fixture(scope="session")
 def jams_server():
     proc = subprocess.Popen(
-        [JAMS_BIN],
+        ["sudo", JAMS_BIN, "--add-user", "ci-test-user", "ci-test-password"],
         cwd=os.path.dirname(JAMS_CONFIG),
         stdout=open("/tmp/jams/logs/stdout.log", "w"),
         stderr=open("/tmp/jams/logs/stderr.log", "w")
@@ -49,10 +49,12 @@ def jams_server():
     except subprocess.TimeoutExpired:
         proc.kill()
 
-@pytest.fixture(scope="session", autouse=True)
-def seed_test_user():
-    subprocess.run(
-        ["sudo", JAMS_BIN, "--add-user", "ci-test-user", "ci-test-password"],
-        check=True,
-        cwd=os.path.dirname(JAMS_CONFIG)
-    )
+# @pytest.fixture(scope="session", autouse=True)
+# def seed_test_user():
+#     print("starting seed_test_user")
+#     subprocess.run(
+#         ["sudo", JAMS_BIN, "--add-user", "ci-test-user", "ci-test-password"],
+#         check=True,
+#         # timeout=30,
+#         cwd=os.path.dirname(JAMS_CONFIG)
+#     )

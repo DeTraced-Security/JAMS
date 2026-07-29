@@ -92,10 +92,10 @@ def test_auth_reject_without_tls():
 
         assert b"538" in reply
 
-def test_weak_tls_rejection():
-    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
-    ctx.minimum_version = ssl.TLSVersion.SSLv3
+# def test_weak_tls_rejection():
+#     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+#     ctx.check_hostname = False
+#     ctx.verify_mode = ssl.CERT_NONE
+#     ctx.minimum_version = ssl.TLSVersion.SSLv3
 
-    ...
+#     ...

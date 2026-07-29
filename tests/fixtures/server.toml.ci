@@ -1,0 +1,12 @@
+[server]
+hostname = "mail.detraced.org"
+mailroot = "/var/mail/vhosts"
+
+[ports]
+smtp = 2525
+imap4s = 2993
+imap4 = 2143
+submissions = 2587
+
+[database]
+dbpath = "/var/lib/jams/users.db"
