@@ -257,6 +257,39 @@ bool SMTPSession::deliver() {
         std::string target = aliases_.resolve(rcpt);
         std::string mailbox_user = (at != std::string::npos) ? target.substr(0, at) : target;
 
+        if (!MailDir::is_safe(mailbox_user)) {
+            logger.warn("[DELIVER] Rejected unsafe local part");
+            all_ok = false;
+
+            continue;
+        }
+
+        std::filesystem::path target_path = std::filesystem::weakly_canonical(
+            std::filesystem::path(get_mailroot()) / mailbox_user
+        );
+
+        std::filesystem::path root_path = std::filesystem::weakly_canonical(get_mailroot());
+
+        auto [root_match, target_match] = std::mismatch(root_path.begin(), root_path.end(), target_path.begin());
+        if (root_match != root_path.end()) {
+            logger.warn("[DELIVER] Attempted path traversal blocked");
+            all_ok = false;
+
+            continue;
+        }
+
+        MailDir mdir(get_mailroot() + mailbox_user);
+        auto stored_path = mdir.deliver(env_.mail_from, rcpt, env_.body);
+
+        if (!stored_path) {
+            logger.error("[DELIVER] Failed for: " + rcpt);
+            all_ok = false;
+        }
+
+        if (target != rcpt) {
+            aliases_.schedule_purge(rcpt, mailbox_user, *stored_path);
+        }
+
         MailDir mdir(get_mailroot() + mailbox_user);
         auto stored_path = mdir.deliver(env_.mail_from, rcpt, env_.body);
         if (stored_path == "") {
