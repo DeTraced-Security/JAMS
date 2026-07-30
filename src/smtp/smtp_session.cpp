@@ -178,6 +178,11 @@ void SMTPSession::cmd_rcpt(std::string_view arg) {
         return;
     }
 
+    if (!MailDir::is_safe(addr)) {
+        reply_code(550, "Mailbox unavailable");
+        return;
+    }
+
     std::string resolved = aliases_.resolve(addr);
     bool is_alias = (resolved != addr);
 

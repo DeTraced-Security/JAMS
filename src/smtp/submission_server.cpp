@@ -270,6 +270,11 @@ void SubmissionServer::cmd_rcpt(std::string_view arg) {
 
     std::transform(domain.begin(), domain.end(), domain.begin(), ::tolower);
 
+    if (!MailDir::is_safe(domain)) {
+        reply(550, "Mailbox unavailable");
+        return;
+    }
+
     if (domain != get_hostname()) {
         reply(500, "5.7.1 Relaying denied");
     }
