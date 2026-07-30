@@ -1,6 +1,6 @@
 [server]
-hostname = "mail.detraced.org"
-mailroot = "/var/mail/vhosts"
+hostname = "localhost"
+mailroot = "/tmp/jams/mail/"
 
 [ports]
 smtp = 2525
@@ -9,4 +9,4 @@ imap4 = 2143
 submissions = 2587
 
 [database]
-dbpath = "/var/lib/jams/users.db"
+dbpath = "/tmp/jams/db/users.db"
