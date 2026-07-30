@@ -40,6 +40,7 @@ void help(const char* prog) {
     std::cerr << "Usage: " << prog << " [options]"
         << "\n"
         << "Server Configuration are made via the `../config/server.toml` file"
+        << "\n--add-user <username> <password> - For quick test provisioning of accounts\n"
         << "\n"
         << "notes:\n"
         << "  ports below 1024 require CAP_NET_BIND_SERVICE or root\n"

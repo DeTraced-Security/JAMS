@@ -245,7 +245,7 @@ void IoUringLoop::on_accept(int /*fd*/, int res) {
     // Always re-arm accept first so we don't miss new connections
     arm_accept();
 
-    if (buffers_.size() >= 10) {
+    if (buffers_.size() >= 100) {
         ::close(res);
         return;
     }

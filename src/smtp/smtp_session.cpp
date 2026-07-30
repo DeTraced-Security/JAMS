@@ -55,6 +55,11 @@ void SMTPSession::on_data(std::span<const uint8_t> bytes) {
 
                 process_line(line_buf);
                 line_buf.clear();
+
+                if (tls_upgrade_pending_) {
+                    tls_upgrade_pending_ = false;
+                    return;
+                }
             } else {
                 line_buf += static_cast<char>(b);
                 // Guard against long lines (RFC-5321 4.5.3)
@@ -166,6 +171,8 @@ void SMTPSession::cmd_rcpt(std::string_view arg) {
     }
 
     auto addr = std::string(extract_address(arg.substr(3)));
+    auto at = addr.find('@');
+    std::string local = (at != std::string::npos) ? addr.substr(0, at) : addr;
 
     if (addr.empty()) {
         reply_code(501, "Empty Recipient");
@@ -178,11 +185,18 @@ void SMTPSession::cmd_rcpt(std::string_view arg) {
         return;
     }
 
+    if (!MailDir::is_safe(local)) {
+        reply_code(550, "Mailbox unavailable");
+        return;
+    }
+
     std::string resolved = aliases_.resolve(addr);
     bool is_alias = (resolved != addr);
 
     if (is_alias) {
+        logger.warn("[SMTP] treated as alias: addr='" + addr + "'");
         if (!aliases_.accept_and_consume(addr)) {
+            logger.warn("[SMTP] accept_and_consume rejected: " + addr);
             reply_code(550, "Mailbox unavailable");
             return;
         }
@@ -242,6 +256,7 @@ void SMTPSession::cmd_starttls() {
     env_ = {};
     state_ = SMTPState::Greeted;
     line_buf.clear();
+    tls_upgrade_pending_ = true;
 
     // Hand off to the loop
     loop_.upgrade_tls(conn_id_);
@@ -257,9 +272,31 @@ bool SMTPSession::deliver() {
         std::string target = aliases_.resolve(rcpt);
         std::string mailbox_user = (at != std::string::npos) ? target.substr(0, at) : target;
 
+        if (!MailDir::is_safe(mailbox_user)) {
+            logger.warn("[DELIVER] Rejected unsafe local part");
+            all_ok = false;
+
+            continue;
+        }
+
+        std::filesystem::path target_path = std::filesystem::weakly_canonical(
+            std::filesystem::path(get_mailroot()) / mailbox_user
+        );
+
+        std::filesystem::path root_path = std::filesystem::weakly_canonical(get_mailroot());
+
+        auto [root_match, target_match] = std::mismatch(root_path.begin(), root_path.end(), target_path.begin());
+        if (root_match != root_path.end()) {
+            logger.warn("[DELIVER] Attempted path traversal blocked");
+            all_ok = false;
+
+            continue;
+        }
+
         MailDir mdir(get_mailroot() + mailbox_user);
         auto stored_path = mdir.deliver(env_.mail_from, rcpt, env_.body);
-        if (stored_path == "") {
+
+        if (!stored_path) {
             logger.error("[DELIVER] Failed for: " + rcpt);
             all_ok = false;
         }

@@ -94,6 +94,31 @@ std::optional<std::string> MailDir::deliver(
     return std::string(new_path.c_str());
 }
 
+bool MailDir::is_safe(const std::string &addr) {
+    if (addr.empty() || addr.size() > 64) {
+        return false;
+    }
+
+    for (char c : addr) {
+        // Disallow non-standard characters in domain names
+        if (!std::isalnum(
+            static_cast<unsigned char>(c)) && c != '.' && c != '-' && c != '_' && c != '+') {
+            return false;
+        }
+    }
+
+    // Reject leading/trailing dots and double dots
+    if (addr.front() == '.' || addr.back() == '.') {
+        return false;
+    }
+
+    if (addr.find("..") != std::string::npos) {
+        return false;
+    }
+
+    return true;
+}
+
 // Filename Generation
 // Format: <sec>.<pid>.<hostname>,S=<size>:2,
 //

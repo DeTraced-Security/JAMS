@@ -156,4 +156,6 @@ class SubmissionServer : public Session {
 
         Envelope env_;
         std::string client_helo_;
+
+        bool tls_upgrade_pending_ = false;
 };

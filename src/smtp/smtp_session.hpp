@@ -124,5 +124,5 @@ class SMTPSession : public Session {
         std::string client_helo_;
 
         std::string data_tail_;
-
+        bool tls_upgrade_pending_ = false;
 };
