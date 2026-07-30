@@ -171,6 +171,8 @@ void SMTPSession::cmd_rcpt(std::string_view arg) {
     }
 
     auto addr = std::string(extract_address(arg.substr(3)));
+    auto at = addr.find('@');
+    std::string local = (at != std::string::npos) ? addr.substr(0, at) : addr;
 
     if (addr.empty()) {
         reply_code(501, "Empty Recipient");
@@ -183,12 +185,12 @@ void SMTPSession::cmd_rcpt(std::string_view arg) {
         return;
     }
 
-    if (!MailDir::is_safe(addr)) {
+    if (!MailDir::is_safe(local)) {
         reply_code(550, "Mailbox unavailable");
         return;
     }
 
-    std::string resolved = aliases_.resolve(addr);
+    std::string resolved = aliases_.resolve(local);
     bool is_alias = (resolved != addr);
 
     if (is_alias) {
