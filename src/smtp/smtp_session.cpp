@@ -289,17 +289,6 @@ bool SMTPSession::deliver() {
         if (target != rcpt) {
             aliases_.schedule_purge(rcpt, mailbox_user, *stored_path);
         }
-
-        MailDir mdir(get_mailroot() + mailbox_user);
-        auto stored_path = mdir.deliver(env_.mail_from, rcpt, env_.body);
-        if (stored_path == "") {
-            logger.error("[DELIVER] Failed for: " + rcpt);
-            all_ok = false;
-        }
-
-        if (target != rcpt) {
-            aliases_.schedule_purge(rcpt, mailbox_user, *stored_path);
-        }
     }
 
     return all_ok;
