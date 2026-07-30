@@ -272,6 +272,13 @@ void SubmissionServer::cmd_rcpt(std::string_view arg) {
         return;
     }
 
+    
+    // RFC 5321 4.5.3: max 100
+    if (env_.rcpt_to.size() >= 100) {
+        reply(452, "Too Many Recipients");
+        return;
+    }
+
     auto at = addr.find('@');
     std::string domain = (at != std::string::npos) ? addr.substr(at + 1) : "";
 
@@ -284,12 +291,6 @@ void SubmissionServer::cmd_rcpt(std::string_view arg) {
 
     if (domain != get_hostname()) {
         reply(500, "5.7.1 Relaying denied");
-    }
-
-    // RFC 5321 4.5.3: max 100
-    if (env_.rcpt_to.size() >= 100) {
-        reply(452, "Too Many Recipients");
-        return;
     }
 
     std::string resolved = aliases_.resolve(addr);
