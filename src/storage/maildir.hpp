@@ -20,6 +20,11 @@ class MailDir {
         std::optional<std::string> deliver(const std::string& mail_from,
             const std::string& rcpt_to,
             const std::string& body);
+
+        /// @brief Safety check against malicious address manipulation
+        /// @param addr 
+        /// @return 
+        static bool is_safe(const std::string& addr);
         
     private:
         std::string unique_filename(size_t body_size) const;

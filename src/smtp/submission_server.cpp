@@ -10,6 +10,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <sstream>
+#include <filesystem>
 #include "globals.hpp"
 
 SubmissionServer::SubmissionServer(
@@ -264,6 +265,15 @@ void SubmissionServer::cmd_rcpt(std::string_view arg) {
         return;
     }
 
+    auto at = addr.find('@');
+    std::string domain = (at != std::string::npos) ? addr.substr(at + 1) : "";
+
+    std::transform(domain.begin(), domain.end(), domain.begin(), ::tolower);
+
+    if (domain != get_hostname()) {
+        reply(500, "5.7.1 Relaying denied");
+    }
+
     // RFC 5321 4.5.3: max 100
     if (env_.rcpt_to.size() >= 100) {
         reply(452, "Too Many Recipients");
@@ -333,7 +343,15 @@ bool SubmissionServer::deliver() {
         std::string domain = (at != std::string::npos) ? rcpt.substr(at + 1) : "";
         std::string local = (at != std::string::npos) ? rcpt.substr(0, at) : rcpt;
 
+        if (!MailDir::is_safe(local)) {
+            logger.warn("[DELIVER] Rejected unsafe local part");
+            all_ok = false;
+            
+            continue;
+        } 
+
         if (domain.empty() || domain == get_hostname()) {
+
             std::string target = aliases_.resolve(rcpt);
             std::string mailbox_user = target;
 
@@ -342,9 +360,31 @@ bool SubmissionServer::deliver() {
                 mailbox_user = mailbox_user.substr(0, tat);
             }
 
-            MailDir mdir(get_mailroot() + local);
+            if (!MailDir::is_safe(mailbox_user)) {
+                logger.warn("[DELIVER] Rejected unsafe local part");
+                all_ok = false;
+
+                continue;
+            }
+
+            std::filesystem::path target_path = std::filesystem::weakly_canonical(
+                std::filesystem::path(get_mailroot()) / mailbox_user
+            );
+
+            std::filesystem::path root_path = std::filesystem::weakly_canonical(get_mailroot());
+
+            auto [root_match, target_match] = std::mismatch(root_path.begin(), root_path.end(), target_path.begin());
+            if (root_match != root_path.end()) {
+                logger.warn("[DELIVER] Attempted path traversal blocked");
+                all_ok = false;
+
+                continue;
+            }
+
+            MailDir mdir(get_mailroot() + mailbox_user);
             auto stored_path = mdir.deliver(env_.mail_from, rcpt, env_.body);
-            if (stored_path == "") {
+
+            if (!stored_path) {
                 logger.error("[DELIVER] Failed for: " + rcpt);
                 all_ok = false;
             }
