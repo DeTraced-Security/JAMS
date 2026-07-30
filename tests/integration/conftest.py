@@ -30,9 +30,11 @@ def wait_for_port(port, timeout=10):
 
 @pytest.fixture(scope="session")
 def jams_server():
+    os.makedirs("/tmp/jams/logs", exist_ok=True)
+
     proc = subprocess.Popen(
         ["sudo", JAMS_BIN, "--add-user", "ci-test-user", "ci-test-password"],
-        # cwd=os.path.dirname(JAMS_CONFIG),
+        cwd=os.path.dirname(JAMS_CONFIG),
         stdout=open("/tmp/jams/logs/stdout.log", "w"),
         stderr=open("/tmp/jams/logs/stderr.log", "w")
     )
