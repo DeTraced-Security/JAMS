@@ -137,7 +137,6 @@ int main(int argc, char* argv[]) {
 
         if (!cred_store.add_user(username, password)) {
             logger.error("[JAMS] Failed to add user '" + username + "'\n\tIt may already exist, see logs for details");
-            return 1;
         }
 
         logger.info("[JAMS] User '" + username + "' created successfully");
@@ -146,7 +145,7 @@ int main(int argc, char* argv[]) {
     Aliases aliases(cred_store);
 
     // SMTP inbound loop
-    logger.info("[JAMS] Starting SMTP inbound on port: " + cfg.smtp_port);
+    logger.info("[JAMS] Starting SMTP inbound on port: " + std::to_string(cfg.smtp_port));
     logger.info("[JAMS] Hostname: " + JAMS_HOSTNAME);
     logger.info("[JAMS] Ready\n");
 

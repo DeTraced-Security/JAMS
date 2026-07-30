@@ -23,7 +23,8 @@ def wait_for_port(port, timeout=10):
         try:
             with socket.create_connection(("127.0.0.1", port), timeout=0.5):
                 return True
-        except (ConnectionRefusedError, OSError):
+        except (ConnectionRefusedError, OSError) as e:
+            print(f"Error occurred: {e}")
             time.sleep(0.1)
     return False
 
@@ -31,7 +32,7 @@ def wait_for_port(port, timeout=10):
 def jams_server():
     proc = subprocess.Popen(
         ["sudo", JAMS_BIN, "--add-user", "ci-test-user", "ci-test-password"],
-        cwd=os.path.dirname(JAMS_CONFIG),
+        # cwd=os.path.dirname(JAMS_CONFIG),
         stdout=open("/tmp/jams/logs/stdout.log", "w"),
         stderr=open("/tmp/jams/logs/stderr.log", "w")
     )
