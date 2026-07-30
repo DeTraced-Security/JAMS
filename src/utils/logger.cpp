@@ -3,15 +3,17 @@
 #include <filesystem>
 
 Logger::Logger(const std::string& filepath) {
-    const std::string absolute_path = std::filesystem::weakly_canonical(filepath).string();
-    const bool is_ok = std::filesystem::is_regular_file(absolute_path);
+    const std::filesystem::path absolute_path = std::filesystem::weakly_canonical(filepath);
+    
+    std::error_code ec;
+    std::filesystem::create_directories(absolute_path.parent_path(), ec);
 
-    if (!is_ok) {
+    file_ = std::ofstream(absolute_path, std::ios::app);
+
+    if (!file_.is_open()) {
         throw std::runtime_error("[logger] [ERROR]: Failed to open: " + filepath);
         exit(1);
     }
-
-    file_ = std::ofstream(absolute_path, std::ios::app);
     worker_ = std::thread(&Logger::run, this);
 }
 

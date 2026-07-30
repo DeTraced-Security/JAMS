@@ -121,10 +121,31 @@ int main(int argc, char* argv[]) {
     }
 
     
+    if (argc > 1 && std::string(argv[1]) == "--add-user") {
+        if (argc != 4) {
+            logger.error("CLI Usage: " + std::string(argv[0]) + " --add-user <username> <password");
+            return 1;
+        }
+
+        std::string username = argv[2];
+        std::string password = argv[3];
+
+        if (username.empty() || password.empty()) {
+            logger.error("[JAMS] Username and password must not be empty");
+            return 1;
+        }
+
+        if (!cred_store.add_user(username, password)) {
+            logger.error("[JAMS] Failed to add user '" + username + "'\n\tIt may already exist, see logs for details");
+        }
+
+        logger.info("[JAMS] User '" + username + "' created successfully");
+    }
+    
     Aliases aliases(cred_store);
 
     // SMTP inbound loop
-    logger.info("[JAMS] Starting SMTP inbound on port: " + cfg.smtp_port);
+    logger.info("[JAMS] Starting SMTP inbound on port: " + std::to_string(cfg.smtp_port));
     logger.info("[JAMS] Hostname: " + JAMS_HOSTNAME);
     logger.info("[JAMS] Ready\n");
 

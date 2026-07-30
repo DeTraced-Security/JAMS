@@ -46,7 +46,7 @@ namespace Auth {
                 created_at INTEGER NOT NULL
             );
 
-            CREATE TABLE aliases (
+            CREATE TABLE IF NOT EXISTS aliases (
                 alias TEXT PRIMARY KEY, -- full address
                 username TEXT NOT NULL, -- target account
                 active INTEGER NOT NULL DEFAULT 1,
@@ -57,14 +57,14 @@ namespace Auth {
                 FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE
             );
 
-            CREATE TABLE alias_allowed_domains (
+            CREATE TABLE IF NOT EXISTS alias_allowed_domains (
                 alias TEXT NOT NULL,
                 domain TEXT NOT NULL,
                 PRIMARY KEY (alias, domain),
                 FOREIGN KEY (alias) REFERENCES aliases(alias) ON DELETE CASCADE
             );
 
-            CREATE TABLE message_purge_queue (
+            CREATE TABLE IF NOT EXISTS message_purge_queue (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 alias TEXT NOT NULL,
                 username TEXT NOT NULL,
@@ -73,8 +73,8 @@ namespace Auth {
                 FOREIGN KEY (alias) REFERENCES aliases(alias) ON DELETE CASCADE
             );
 
-            CREATE INDEX idx_purge_queue_time ON message_purge_queue(purge_at);
-            CREATE INDEX idx_aliases_username ON aliases(username);
+            CREATE INDEX IF NOT EXISTS idx_purge_queue_time ON message_purge_queue(purge_at);
+            CREATE INDEX IF NOT EXISTS idx_aliases_username ON aliases(username);
         )sql");
     }
 

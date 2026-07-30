@@ -6,9 +6,17 @@
 
 extern volatile sig_atomic_t g_shutdown;
 
-inline TOMLParser load_configs{"../config/server.toml"};
+inline std::string resolve_path(const char* env, const char* fallback) {
+    if (const char* env_ = std::getenv(env)) {
+        return env_;
+    }
+
+    return fallback;
+}
+
+inline TOMLParser load_configs{resolve_path("JAMS_CONFIG", "../config/server.toml")};
 inline const auto configs = load_configs.fetch_configs();
-inline Logger logger{"../logs/jams.txt"};
+inline Logger logger{resolve_path("JAMS_LOG_PATH", "../logs/jams.txt")};
 
 inline std::string get_hostname() {
     std::string result{};
