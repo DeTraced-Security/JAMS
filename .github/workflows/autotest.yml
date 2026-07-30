@@ -39,7 +39,7 @@ jobs:
             
             - name: Setup test config
               run: |
-                mkdir -p /tmp/jams/{db,mail,tls,config}
+                mkdir -p /tmp/jams/{db,mail,tls,config,logs}
                 sudo mkdir -p /etc/jams/tls
                 sudo cp tests/fixtures/tls/cert.pem /etc/jams/tls/
                 sudo cp tests/fixtures/tls/key.pem /etc/jams/tls/
