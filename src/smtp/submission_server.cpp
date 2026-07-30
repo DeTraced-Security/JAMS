@@ -88,10 +88,6 @@ void SubmissionServer::on_data(std::span<const uint8_t> bytes) {
 }
 
 void SubmissionServer::process_line(std::string_view line) {
-    if (line.empty()) {
-        return;
-    }
-
     // If SASL is in exchange, the line will be continuous, not a command
     if (sasl_.in_progress()) {
         // "*" Cancels the exchange
@@ -105,6 +101,9 @@ void SubmissionServer::process_line(std::string_view line) {
         return;
     }
 
+    if (line.empty()) {
+        return;
+    }
 
     // Continue like SMTP
     auto sp = line.find(' ');

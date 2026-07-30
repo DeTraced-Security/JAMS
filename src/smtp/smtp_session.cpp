@@ -190,11 +190,13 @@ void SMTPSession::cmd_rcpt(std::string_view arg) {
         return;
     }
 
-    std::string resolved = aliases_.resolve(local);
+    std::string resolved = aliases_.resolve(addr);
     bool is_alias = (resolved != addr);
 
     if (is_alias) {
+        logger.warn("[SMTP] treated as alias: addr='" + addr + "'");
         if (!aliases_.accept_and_consume(addr)) {
+            logger.warn("[SMTP] accept_and_consume rejected: " + addr);
             reply_code(550, "Mailbox unavailable");
             return;
         }
