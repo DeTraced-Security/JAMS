@@ -55,6 +55,11 @@ void SMTPSession::on_data(std::span<const uint8_t> bytes) {
 
                 process_line(line_buf);
                 line_buf.clear();
+
+                if (tls_upgrade_pending_) {
+                    tls_upgrade_pending_ = false;
+                    return;
+                }
             } else {
                 line_buf += static_cast<char>(b);
                 // Guard against long lines (RFC-5321 4.5.3)
@@ -247,6 +252,7 @@ void SMTPSession::cmd_starttls() {
     env_ = {};
     state_ = SMTPState::Greeted;
     line_buf.clear();
+    tls_upgrade_pending_ = true;
 
     // Hand off to the loop
     loop_.upgrade_tls(conn_id_);

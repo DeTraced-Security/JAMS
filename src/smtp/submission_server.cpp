@@ -69,6 +69,12 @@ void SubmissionServer::on_data(std::span<const uint8_t> bytes) {
 
                 process_line(line_buf_);
                 line_buf_.clear();
+
+                
+                if (tls_upgrade_pending_) {
+                    tls_upgrade_pending_ = false;
+                    return;
+                }
             } else {
                 line_buf_ += static_cast<char>(b);
                 // Guard against long lines (RFC-5321 4.5.3)
@@ -175,6 +181,7 @@ void SubmissionServer::cmd_starttls() {
     state_ = State::Greeted;
 
     line_buf_.clear();
+    tls_upgrade_pending_ = true;
     loop_.upgrade_tls(conn_id_);
 }
 
