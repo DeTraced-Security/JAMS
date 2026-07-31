@@ -46,6 +46,12 @@ class SMTPSession : public Session {
         }
         
     private:
+        /// @brief Helper function to strip headers from the body of an email
+        /// @param body 
+        /// @param header_name 
+        /// @return
+        auto strip_header(const std::string& body, const std::string& header_name);
+
         /// @brief Processes commands received from on-wire data
         /// @param line 
         void process_line(std::string_view line);
