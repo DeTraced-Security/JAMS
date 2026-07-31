@@ -3,10 +3,10 @@ hostname = "mail.detraced.org"
 mailroot = "/var/mail/vhosts"
 
 [ports]
-smtp = 2525
-imap4s = 2993
-imap4 = 2143
-submissions = 2587
+smtp = 25
+imap4s = 993
+imap4 = 143
+submissions = 587
 
 [database]
 dbpath = "/var/lib/jams/users.db"
