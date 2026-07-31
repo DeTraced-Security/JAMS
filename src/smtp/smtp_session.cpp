@@ -262,10 +262,52 @@ void SMTPSession::cmd_starttls() {
     loop_.upgrade_tls(conn_id_);
 }
 
+auto SMTPSession::strip_header(const std::string& body, const std::string& header_name) {
+    std::string result{};
+    std::istringstream ss(body);
+    std::string line{};
+    bool skipping{false};
+
+    while (std::getline(ss, line)) {
+        std::string stripped{line};
+
+        if (!stripped.empty() && stripped.back() == '\r') {
+            stripped.pop_back();
+        }
+
+        if (stripped.empty()) {
+            skipping = false;
+            result += line + "\n";
+
+            continue;
+        }
+
+        std::string lower{stripped};
+        std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+
+        if (lower.substr(0, header_name.size() + 1) == header_name + ":") {
+            skipping = true;
+            continue;
+        }
+
+        if (skipping && (stripped[0] == ' ' || stripped[0] == '\t')) {
+            continue;
+        }
+
+        skipping = false;
+        result += line + "\n";
+    }
+
+    return result;
+}
+
 bool SMTPSession::deliver() {
     // TODO: Encrypt before writing
     bool all_ok = true;
+    std::vector<std::string> all_rcpts = env_.rcpt_to;
     
+    std::string clean_body = strip_header(env_.body, "bcc");
+
     for (const auto& rcpt : env_.rcpt_to) {
         // Extract local/account name (before @)
         auto at = rcpt.find('@');
@@ -294,7 +336,7 @@ bool SMTPSession::deliver() {
         }
 
         MailDir mdir(get_mailroot() + mailbox_user);
-        auto stored_path = mdir.deliver(env_.mail_from, rcpt, env_.body);
+        auto stored_path = mdir.deliver(env_.mail_from, rcpt, clean_body);
 
         if (!stored_path) {
             logger.error("[DELIVER] Failed for: " + rcpt);

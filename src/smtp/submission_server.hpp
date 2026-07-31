@@ -55,6 +55,19 @@ class SubmissionServer : public Session {
     
     private:
         DKIM::DKIMSigner dkim_signer_;
+
+        /// @brief Helper overload function to extract email addresses from a body
+        /// used when handling BCC/CC
+        /// @param body
+        /// @param header_name
+        /// @return
+        auto extract_address(const std::string& body, const std::string& header_name);
+
+        /// @brief Helper function to strip headers from the body of an email
+        /// @param body 
+        /// @param header_name 
+        /// @return 
+        auto strip_header(const std::string& body, const std::string& header_name);
         
         bool relay_outbound(
             const std::string& from, const std::string& to,

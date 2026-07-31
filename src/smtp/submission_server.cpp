@@ -87,6 +87,103 @@ void SubmissionServer::on_data(std::span<const uint8_t> bytes) {
     }
 }
 
+auto SubmissionServer::extract_address(const std::string& body, const std::string& header_name) {
+    std::vector<std::string> addresses = {};
+    std::istringstream ss(body);
+    std::string line{};
+    bool in_header{false};
+
+    while (std::getline(ss, line)) {
+        if (line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
+
+        if (line.empty()) {
+            break;
+        }
+
+        std::string lower = line;
+        std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+
+        if (lower.substr(0, header_name.size() + 1) == header_name + ":") {
+            in_header = true;
+            line = line.substr(header_name.size() + 1);
+        } else if (in_header && (line[0] == ' ' || line[0] == '\t')) {
+            // folded header continuation
+        } else {
+            in_header = false;
+            continue;
+        }
+
+        if (in_header) {
+            std::istringstream field(line);
+            std::string token{};
+
+            while (std::getline(field, token, ',')) {
+                auto lt = token.find('<');
+                auto gt = token.find('>');
+
+                if (lt != std::string::npos && gt != std::string::npos) {
+                    token = token.substr(lt + 1, gt - lt - 1);
+                }
+
+                // trim WS
+                auto start = token.find_first_not_of(" \t");
+                auto end = token.find_last_not_of(" \t");
+
+                if (start != std::string::npos) {
+                    token = token.substr(start, end - start + 1);
+                }
+
+                if (!token.empty()) {
+                    addresses.push_back(token);
+                }
+            }
+        }
+    }
+
+    return addresses;
+}
+
+auto SubmissionServer::strip_header(const std::string& body, const std::string& header_name) {
+    std::string result{};
+    std::istringstream ss(body);
+    std::string line{};
+    bool skipping{false};
+
+    while (std::getline(ss, line)) {
+        std::string stripped{line};
+
+        if (!stripped.empty() && stripped.back() == '\r') {
+            stripped.pop_back();
+        }
+
+        if (stripped.empty()) {
+            skipping = false;
+            result += line + "\n";
+
+            continue;
+        }
+
+        std::string lower{stripped};
+        std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+
+        if (lower.substr(0, header_name.size() + 1) == header_name + ":") {
+            skipping = true;
+            continue;
+        }
+
+        if (skipping && (stripped[0] == ' ' || stripped[0] == '\t')) {
+            continue;
+        }
+
+        skipping = false;
+        result += line + "\n";
+    }
+
+    return result;
+}
+
 void SubmissionServer::process_line(std::string_view line) {
     // If SASL is in exchange, the line will be continuous, not a command
     if (sasl_.in_progress()) {
@@ -348,8 +445,31 @@ bool SubmissionServer::deliver() {
     // TODO: Encrypt before writing
     bool all_ok = true;
     const std::string local_domain = get_hostname();
+    std::vector<std::string> all_rcpts = env_.rcpt_to;
 
-    for (const auto& rcpt : env_.rcpt_to) {
+    for (const auto& hdr : { "cc", "bcc" }) {
+        for (const auto& addr : extract_address(env_.body, hdr)) {
+            auto at = addr.find('@');
+            if (at == std::string::npos) {
+                continue;
+            } 
+
+            std::string domain = addr.substr(at + 1);
+            std::transform(domain.begin(), domain.end(), domain.begin(), ::tolower);
+
+            if (domain.empty() || domain != get_hostname()) {
+                continue;
+            }
+
+            if (std::find(all_rcpts.begin(), all_rcpts.end(), addr) == all_rcpts.end()) {
+                all_rcpts.push_back(addr);
+            }
+        }
+    }
+
+    std::string outbound_body = strip_header(env_.body, "bcc");
+
+    for (const auto& rcpt : all_rcpts) {
         // Extract local/account name (before @)
         auto at = rcpt.find('@');
         std::string domain = (at != std::string::npos) ? rcpt.substr(at + 1) : "";
