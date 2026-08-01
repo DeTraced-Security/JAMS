@@ -67,5 +67,8 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
-
+tests/integration/__pycache__/*
+venv
+logs/
+.pytest*
 .vscode/
