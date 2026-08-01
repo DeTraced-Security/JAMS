@@ -45,15 +45,11 @@ message(STATUS "OpenSSL:  ${OPENSSL_VERSION}")
 set(SOURCES
     src/main.cpp
     src/io/io_uring_loop.cpp
-    
     src/tls/tls_context.cpp
     src/tls/tls_conn.cpp
-    
     src/storage/maildir.cpp
-    
     src/dns/message.cpp
     src/dns/resolver.cpp
-    
     src/auth/spf/checker.cpp
     src/auth/sasl/sasl.cpp
     src/auth/dmarc/checker.cpp
@@ -61,27 +57,22 @@ set(SOURCES
     src/auth/dkim/signer.cpp
     src/auth/credentials/cred_store.cpp
     src/auth/credentials/aliases.cpp
-
     src/smtp/submission_server.cpp
     src/smtp/smtp_session.cpp
-    
     src/imap/session.cpp
-
-    src/config/toml_parse.cpp
-    src/config/toml_parse.hpp
-
     src/utils/logger.cpp
+    src/config/toml_parse.cpp
     src/config/tomlc17.c
 )
 
 add_executable(mailserver ${SOURCES})
 
 target_include_directories(mailserver PRIVATE
-    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/include
     ${LIBURING_INCLUDE_DIR}
     ${OPENSSL_INCLUDE_DIR}
     ${SQLite3_INCLUDE_DIRS}
-    ${CMAKE_SOURCE_DIR}/src/config
+    ${CMAKE_SOURCE_DIR}/include/config
 )
 
 target_link_libraries(mailserver PRIVATE
