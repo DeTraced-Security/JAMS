@@ -31,39 +31,41 @@
 //    │  BIO_read(wbio) → ciphertext    │  → sent to network via io_uring
 //    └─────────────────────────────────┘
 
-class TlsConn {
-    public:
-        using PlaintextCB = std::function<void(std::span<const uint8_t>)>;
+namespace TLS {
+    class Connection {
+        public:
+            using PlaintextCB = std::function<void(std::span<const uint8_t>)>;
 
-        TlsConn(SSL* ssl, PlaintextCB on_plaintext);
-        ~TlsConn();
+            Connection(SSL* ssl, PlaintextCB on_plaintext);
+            ~Connection();
 
-        TlsConn(const TlsConn&) = delete;
-        TlsConn& operator=(const TlsConn&) = delete;
+            Connection(const Connection&) = delete;
+            Connection& operator=(const Connection&) = delete;
 
-        [[nodiscard]]
-        std::vector<uint8_t> feed_encryption(std::span<const uint8_t> cipher_in);
+            [[nodiscard]]
+            std::vector<uint8_t> feed_encryption(std::span<const uint8_t> cipher_in);
 
-        [[nodiscard]]
-        std::vector<uint8_t> encrypt(std::span<const uint8_t> plain_in);
+            [[nodiscard]]
+            std::vector<uint8_t> encrypt(std::span<const uint8_t> plain_in);
 
-        bool handshake_done() const {
-            return handshake_done_;
-        }
+            bool handshake_done() const {
+                return handshake_done_;
+            }
 
-        std::string info() const;
+            std::string info() const;
 
-    private:
-        std::vector<uint8_t> drain_wbio();
+        private:
+            std::vector<uint8_t> drain_wbio();
 
-        std::vector<uint8_t> drive_handshake();
+            std::vector<uint8_t> drive_handshake();
 
-        SSL* ssl_{nullptr};
-        BIO* rbio_{nullptr};
-        BIO* wbio_{nullptr};
-        bool handshake_done_{false};
-        PlaintextCB on_plaintext_;
+            SSL* ssl_{nullptr};
+            BIO* rbio_{nullptr};
+            BIO* wbio_{nullptr};
+            bool handshake_done_{false};
+            PlaintextCB on_plaintext_;
 
-        static constexpr size_t PLAIN_BUF = 16384;
-        uint8_t plain_buf_[PLAIN_BUF];
-};
+            static constexpr size_t PLAIN_BUF = 16384;
+            uint8_t plain_buf_[PLAIN_BUF];
+    };
+}

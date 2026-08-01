@@ -1,6 +1,7 @@
 #pragma once
 
-#include "types.hpp"
+#include "dns/types.hpp"
+
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -8,22 +9,22 @@
 #include <vector>
 
 namespace DNS {
+
     // Encodes and decodes DNS messages per RFC 1035 4.
     //
     // Encoding:
-    //   auto wire = DnsMessage::encode_query("_spf.example.com", RRType::TXT, id);
+    //   auto wire = Message::encode_query("_spf.example.com", RRType::TXT, id);
     //   // send wire bytes over UDP
     //
     // Decoding:
-    //   auto msg = DnsMessage::decode(span_of_udp_payload);
+    //   auto msg = Message::decode(span_of_udp_payload);
     //   if (msg) { /* use msg->answers */ }
     //
     // Name compression (RFC 1035 4.1.4):
     //   Encoded names may contain pointers (top 2 bits = 11) that reference
     //   an earlier offset in the message.  decode_name() follows these pointers
     //   with a depth limit to prevent infinite loops on malformed responses.
-
-    class DNSMessage {
+    class Message {
         public:
             static std::vector<uint8_t> encode_query(const std::string& name, RRType type, uint16_t id);
 

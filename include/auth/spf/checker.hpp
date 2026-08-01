@@ -2,6 +2,7 @@
 
 #include "dns/resolver.hpp"
 #include "dns/types.hpp"
+
 #include <functional>
 #include <string>
 #include <vector>
@@ -30,7 +31,7 @@ namespace SPF {
     // Evaluates the SPF policy for an incoming SMTP message per RFC 7208.
     //
     // Usage:
-    //   SpfChecker checker(resolver);
+    //   Checker checker(resolver);
     //   checker.check("sender@example.com", "203.0.113.1",
     //       [](spf::CheckResult r) {
     //           if (r.result == spf::Result::Fail) { /* reject */ }
@@ -46,9 +47,9 @@ namespace SPF {
     //   - Maximum DNS lookup count enforced: 10 (RFC 7208 4.6.4)
     //
     // Threading: single-threaded; all calls from the io_uring event loop thread.
-    class SPFChecker {
+    class Checker {
         public:
-            explicit SPFChecker(DNS::DNSResolver& resolver);
+            explicit Checker(DNS::Resolver& resolver);
 
             /// @brief Check the SPF headers 
             /// @param mail_from 
@@ -180,6 +181,6 @@ namespace SPF {
             /// @param explanation 
             void finish(std::shared_ptr<EvalState> state, Result result, std::string explanation = {});
 
-            DNS::DNSResolver& resolver_;
+            DNS::Resolver& resolver_;
     };
 };

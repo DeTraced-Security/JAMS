@@ -11,11 +11,11 @@
 #include <span>
 #include <string>
 
-class IoUringLoop;
+class Async::IoUringLoop;
 
 // SMTP submission session for port 587 (RFC 6409).
 //
-// Differences from SmtpSession (port 25):
+// Differences from SMTP::Session (port 25):
 //   1. AUTH is required before MAIL FROM
 //   2. EHLO advertises AUTH PLAIN LOGIN (only after STARTTLS)
 //   3. Outbound messages are DKIM-signed before queuing
@@ -28,147 +28,149 @@ class IoUringLoop;
 // TLS requirement:
 //   AUTH is only advertised after STARTTLS. If a client attempts AUTH
 //   before TLS is established, we respond with 538 (encryption required).
-class SubmissionServer : public Session {
-    public:
-        SubmissionServer(
-            uint64_t conn_id, const std::string& remote_ip,
-            IoUringLoop& loop, Auth::CredentialStore& store,
-            Aliases& aliases
-        );
+namespace SMTP {
+    class SubmissionServer : public SessionFactory {
+        public:
+            SubmissionServer(
+                uint64_t conn_id, const std::string& remote_ip,
+                Async::IoUringLoop& loop, Auth::CredentialStore& store,
+                Auth::Aliases& aliases
+            );
 
-        /// @brief Called by io_uring when bytes arrive
-        /// @param bytes 
-        void on_data(std::span<const uint8_t> bytes);
+            /// @brief Called by io_uring when bytes arrive
+            /// @param bytes 
+            void on_data(std::span<const uint8_t> bytes);
 
-        /// @brief Called by io_uring when the TLS handshake completes
-        void on_tls_established();
+            /// @brief Called by io_uring when the TLS handshake completes
+            void on_tls_established();
 
-        /// @brief Calls out to SASL to check if the connection is authenticated
-        /// @return 
-        bool is_authenticated() const {
-            return sasl_.authenticated();
-        }
+            /// @brief Calls out to SASL to check if the connection is authenticated
+            /// @return 
+            bool is_authenticated() const {
+                return sasl_.authenticated();
+            }
 
-        bool wants_close() const override {
-            return pending_close_;
-        }
-    
-    private:
-        DKIM::DKIMSigner dkim_signer_;
-
-        /// @brief Helper overload function to extract email addresses from a body
-        /// used when handling BCC/CC
-        /// @param body
-        /// @param header_name
-        /// @return
-        auto extract_address(const std::string& body, const std::string& header_name);
-
-        /// @brief Helper function to strip headers from the body of an email
-        /// @param body 
-        /// @param header_name 
-        /// @return 
-        auto strip_header(const std::string& body, const std::string& header_name);
+            bool wants_close() const override {
+                return pending_close_;
+            }
         
-        bool relay_outbound(
-            const std::string& from, const std::string& to,
-            const std::string& domain, const std::string& body
-        );
+        private:
+            DKIM::DKIMSigner dkim_signer_;
 
-        /// @brief Processes commands received from on-wire data
-        /// @param line 
-        void process_line(std::string_view line);
+            /// @brief Helper overload function to extract email addresses from a body
+            /// used when handling BCC/CC
+            /// @param body
+            /// @param header_name
+            /// @return
+            auto extract_address(const std::string& body, const std::string& header_name);
 
-        /// @brief Sends back HELO request to the sender
-        /// @param arg 
-        void cmd_ehlo(std::string_view arg);
+            /// @brief Helper function to strip headers from the body of an email
+            /// @param body 
+            /// @param header_name 
+            /// @return 
+            auto strip_header(const std::string& body, const std::string& header_name);
+            
+            bool relay_outbound(
+                const std::string& from, const std::string& to,
+                const std::string& domain, const std::string& body
+            );
 
-        /// @brief Sends HELO request to the receiver
-        /// @param arg 
-        void cmd_helo(std::string_view arg);
+            /// @brief Processes commands received from on-wire data
+            /// @param line 
+            void process_line(std::string_view line);
 
-        /// @brief Handles on-wire data relating to FROM sender
-        /// @param arg 
-        void cmd_mail(std::string_view arg);
+            /// @brief Sends back HELO request to the sender
+            /// @param arg 
+            void cmd_ehlo(std::string_view arg);
 
-        /// @brief Handles on-wire data relating to Recipient(s)
-        /// @param arg 
-        void cmd_rcpt(std::string_view arg);
+            /// @brief Sends HELO request to the receiver
+            /// @param arg 
+            void cmd_helo(std::string_view arg);
 
-        /// @brief Force Authentication over TLS then authenticate
-        /// @param arg 
-        void cmd_auth(std::string_view arg);
+            /// @brief Handles on-wire data relating to FROM sender
+            /// @param arg 
+            void cmd_mail(std::string_view arg);
 
-        /// @brief Handles overall mail data structure
-        void cmd_data();
+            /// @brief Handles on-wire data relating to Recipient(s)
+            /// @param arg 
+            void cmd_rcpt(std::string_view arg);
 
-        /// @brief Sends reset signal to the mail server (greeting)
-        void cmd_rset();
+            /// @brief Force Authentication over TLS then authenticate
+            /// @param arg 
+            void cmd_auth(std::string_view arg);
 
-        /// @brief If no commands are received reply back with "OK" status
-        void cmd_noop();
+            /// @brief Handles overall mail data structure
+            void cmd_data();
 
-        /// @brief Closes connection to the mail server on QUIT commands
-        void cmd_quit();
+            /// @brief Sends reset signal to the mail server (greeting)
+            void cmd_rset();
 
-        /// @brief Starts the upgrade process for non-secure connections
-        void cmd_starttls();
+            /// @brief If no commands are received reply back with "OK" status
+            void cmd_noop();
 
-        /// @brief Hands over Submission replies to io_uring
-        /// @param text 
-        void reply(int code, std::string_view text);
-        
-        /// @brief Hands multiline Submission replies over to io_uring with specific codes
-        /// @param code 
-        /// @param lines 
-        void reply_multiline(int code, const std::vector<std::string>& lines);
+            /// @brief Closes connection to the mail server on QUIT commands
+            void cmd_quit();
 
-        
-        /// @brief Delivers mail to the recipient
-        /// @return 
-        bool deliver();
+            /// @brief Starts the upgrade process for non-secure connections
+            void cmd_starttls();
 
-        /// @brief Trims unwanted data from the given string
-        /// @param sv 
-        /// @return 
-        static std::string_view trim(std::string_view sv);
+            /// @brief Hands over Submission replies to io_uring
+            /// @param text 
+            void reply(int code, std::string_view text);
+            
+            /// @brief Hands multiline Submission replies over to io_uring with specific codes
+            /// @param code 
+            /// @param lines 
+            void reply_multiline(int code, const std::vector<std::string>& lines);
 
-        /// @brief Extracts domain name from user@domain variants
-        /// @param arg 
-        /// @return 
-        static std::string_view extract_address(std::string_view arg);
+            
+            /// @brief Delivers mail to the recipient
+            /// @return 
+            bool deliver();
 
-        uint64_t conn_id_;
-        std::string remote_ip_;
-        IoUringLoop& loop_;
-        Auth::SASLSession sasl_;
-        Aliases& aliases_;
+            /// @brief Trims unwanted data from the given string
+            /// @param sv 
+            /// @return 
+            static std::string_view trim(std::string_view sv);
 
-        /// @brief Submission States
-        enum class State {
-            Connected,
-            Greeted,
-            Authenticated,
-            Mail,
-            Rcpt,
-            Data,
-            Done
-        };
+            /// @brief Extracts domain name from user@domain variants
+            /// @param arg 
+            /// @return 
+            static std::string_view extract_address(std::string_view arg);
 
-        State state_{State::Connected};
-        bool tls_active_{false};
-        std::string line_buf_;
-        std::string data_tail_;
+            uint64_t conn_id_;
+            std::string remote_ip_;
+            Async::IoUringLoop& loop_;
+            Auth::SASLSession sasl_;
+            Auth::Aliases& aliases_;
 
-        bool pending_close_{false};
+            /// @brief Submission States
+            enum class State {
+                Connected,
+                Greeted,
+                Authenticated,
+                Mail,
+                Rcpt,
+                Data,
+                Done
+            };
 
-        struct Envelope {
-            std::string mail_from;
-            std::vector<std::string> rcpt_to;
-            std::string body;
-        };
+            State state_{State::Connected};
+            bool tls_active_{false};
+            std::string line_buf_;
+            std::string data_tail_;
 
-        Envelope env_;
-        std::string client_helo_;
+            bool pending_close_{false};
 
-        bool tls_upgrade_pending_ = false;
-};
+            struct Envelope {
+                std::string mail_from;
+                std::vector<std::string> rcpt_to;
+                std::string body;
+            };
+
+            Envelope env_;
+            std::string client_helo_;
+
+            bool tls_upgrade_pending_ = false;
+    };
+}
