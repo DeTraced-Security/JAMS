@@ -1,5 +1,6 @@
-#include "resolver.hpp"
+#include "dns/resolver.hpp"
 #include "globals.hpp"
+
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <unistd.h>

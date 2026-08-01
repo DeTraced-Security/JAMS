@@ -1,15 +1,13 @@
-#include "io_uring_loop.hpp"
+#include "io/io_uring_loop.hpp"
 #include "smtp/smtp_session.hpp"
 #include "dns/resolver.hpp"
 #include "globals.hpp"
-
 #include <liburing.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <fcntl.h>
- 
 #include <cstring>
 #include <stdexcept>
 #include <iostream>

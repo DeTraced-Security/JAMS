@@ -1,7 +1,8 @@
-#include "aliases.hpp"
+#include "globals.hpp"
+#include "auth/credentials/aliases.hpp"
+
 #include <ctime>
 #include <algorithm>
-#include "globals.hpp"
 
 std::string Aliases::extract_domain(const std::string &address)
 {

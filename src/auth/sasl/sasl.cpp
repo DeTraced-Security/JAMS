@@ -1,5 +1,6 @@
-#include "sasl.hpp"
+#include "auth/sasl/sasl.hpp"
 #include "globals.hpp"
+
 #include <openssl/bio.h>
 #include <openssl/buffer.h>
 #include <openssl/evp.h>

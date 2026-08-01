@@ -6,6 +6,7 @@
 #include "config/toml_parse.hpp"
 #include "globals.hpp"
 #include "auth/credentials/aliases.hpp"
+
 #include <csignal>
 #include <cstring>
 #include <stdexcept>

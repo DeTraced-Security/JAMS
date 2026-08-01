@@ -1,4 +1,5 @@
-#include "message.hpp"
+#include "dns/message.hpp"
+
 #include <arpa/inet.h>
 #include <cassert>
 #include <cstring>

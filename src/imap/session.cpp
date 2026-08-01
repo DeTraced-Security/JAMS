@@ -1,6 +1,7 @@
 #include "imap/session.hpp"
 #include "auth/credentials/cred_store.hpp"
 #include "globals.hpp"
+
 #include <dirent.h>
 #include <fcntl.h>
 #include <sys/stat.h>

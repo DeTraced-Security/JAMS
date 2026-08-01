@@ -1,4 +1,6 @@
-#include "maildir.hpp"
+#include "storage/maildir.hpp"
+#include "globals.hpp"
+
 #include <unistd.h>
 #include <sys/types.h>
 #include <chrono>
@@ -7,7 +9,6 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>
-#include "globals.hpp"
 
 MailDir::MailDir(std::string base_path) : base_(std::move(base_path)) {};
 

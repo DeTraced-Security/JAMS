@@ -1,5 +1,6 @@
-#include "verifier.hpp"
+#include "auth/dkim/verifier.hpp"
 #include "globals.hpp"
+
 #include <openssl/bio.h>
 #include <openssl/evp.h>
 #include <openssl/pem.h>

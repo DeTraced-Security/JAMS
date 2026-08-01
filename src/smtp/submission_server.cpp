@@ -1,6 +1,8 @@
-#include "submission_server.hpp"
+#include "smtp/submission_server.hpp"
 #include "io/io_uring_loop.hpp"
 #include "storage/maildir.hpp"
+#include "globals.hpp"
+
 #include <cctype>
 #include <iostream>
 #include <sstream>
@@ -11,7 +13,6 @@
 #include <netdb.h>
 #include <sstream>
 #include <filesystem>
-#include "globals.hpp"
 
 SubmissionServer::SubmissionServer(
     uint64_t conn_id, const std::string& remote_ip,

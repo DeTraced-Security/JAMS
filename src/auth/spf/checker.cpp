@@ -1,5 +1,6 @@
-#include "checker.hpp"
+#include "auth/spf/checker.hpp"
 #include "globals.hpp"
+
 #include <arpa/inet.h>
 #include <algorithm>
 #include <array>

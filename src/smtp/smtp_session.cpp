@@ -1,7 +1,8 @@
-#include "smtp_session.hpp"
+#include "smtp/smtp_session.hpp"
 #include "io/io_uring_loop.hpp"
 #include "storage/maildir.hpp"
 #include "globals.hpp"
+
 #include <algorithm>
 #include <cctype>
 #include <iostream>

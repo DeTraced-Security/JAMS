@@ -1,4 +1,6 @@
-#include "cred_store.hpp"
+#include "auth/credentials/cred_store.hpp"
+#include "globals.hpp"
+
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 #include <openssl/bio.h>
@@ -7,7 +9,6 @@
 #include <cstring>
 #include <iostream>
 #include <vector>
-#include "globals.hpp"
 
 namespace Auth {
     CredentialStore::CredentialStore(const std::string& db_path) {
