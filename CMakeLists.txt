@@ -61,8 +61,8 @@ set(SOURCES
     src/smtp/smtp_session.cpp
     src/imap/session.cpp
     src/utils/logger.cpp
-    src/config/toml_parse.cpp
-    src/config/tomlc17.c
+    src/utils/config/toml_parse.cpp
+    src/utils/config/tomlc17.c
 )
 
 add_executable(mailserver ${SOURCES})
