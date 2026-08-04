@@ -1,5 +1,10 @@
 #pragma once
 
+#include "session_factory.hpp"
+#include "tls/tls_context.hpp"
+#include "tls/tls_conn.hpp"
+#include "dns/resolver.hpp"
+
 #include <liburing.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -11,10 +16,6 @@
 #include <span>
 #include <vector>
 #include <deque>
-#include "session_factory.hpp"
-#include "tls/tls_context.hpp"
-#include "tls/tls_conn.hpp"
-#include "dns/resolver.hpp"
 
 /// @brief Operation Types for io_uring
 enum class op_type : uint8_t {
@@ -48,9 +49,9 @@ inline uint64_t decode_conn_id(uint64_t userdata) {
 }
 
 // Forward Declarations
-class SMTPSession;
-class TlsContext;
-class TlsConn;
+class SMTP::Session;
+class TLS::Connection;
+class TLS::Context;
 
 /**
  * Design Notes:
@@ -58,9 +59,11 @@ class TlsConn;
  * - Each connection is monotonically increasing
  * - The accept loop rearms itself after every accept
  */
-class IoUringLoop {
+namespace Async {
+    class IoUringLoop {
     public:
-        using SessionFactory = std::function<std::unique_ptr<Session>(uint64_t, const std::string&, IoUringLoop&)>;
+        using SessionFactory = std::function<std::unique_ptr<SMTP::Session>(uint64_t, const std::string&, IoUringLoop&)>;
+        using SessionFactory = std::function<std::unique_ptr<SMTP::SubmissionServer>(uint64_t, const std::string&, Async::IoUringLoop&)>;
 
         /// @brief Initialise io_uring with a queue depth of 256
         /// @param port 
@@ -90,7 +93,7 @@ class IoUringLoop {
 
         /// @brief Return a pointer to the DNS resolver
         /// @return 
-        DNS::DNSResolver& dns_resolver() {
+        DNS::Resolver& dns_resolver() {
             return *dns_resolver_;
         }
 
@@ -143,31 +146,32 @@ class IoUringLoop {
         void flush_write(uint64_t conn_id);
 
         uint16_t port_;
-        int listen_fd_{-1};
+        int listen_fd_{ -1 };
 
         io_uring ring_{};
-        bool ring_initialized_{false};
+        bool ring_initialized_{ false };
 
-        std::unique_ptr<TlsContext> tls_ctx_;
-        std::unique_ptr<DNS::DNSResolver> dns_resolver_;
+        std::unique_ptr<TLS::Context> tls_ctx_;
+        std::unique_ptr<DNS::Resolver> dns_resolver_;
 
         sockaddr_in client_addr_{};
-        socklen_t client_addr_len_{sizeof(client_addr_)};
+        socklen_t client_addr_len_{ sizeof(client_addr_) };
 
         static constexpr size_t READ_BUF_SIZE = 8192;
         struct ConnBuffer {
             std::vector<uint8_t> read_buf;
             std::deque<std::vector<uint8_t>> write_queue;
-            bool write_pending{false};
-            bool closing{false};
-            int inflight{0};
-            int fd{-1};
+            bool write_pending{ false };
+            bool closing{ false };
+            int inflight{ 0 };
+            int fd{ -1 };
         };
 
         SessionFactory session_factory_;
 
-        uint64_t next_conn_id{1};
+        uint64_t next_conn_id{ 1 };
         std::unordered_map<uint64_t, ConnBuffer> buffers_;
-        std::unordered_map<uint64_t, std::unique_ptr<Session>> sessions_;
-        std::unordered_map<uint64_t, std::unique_ptr<TlsConn>> tls_conns_;
+        std::unordered_map<uint64_t, std::unique_ptr<SMTP::Session>> sessions_;
+        std::unordered_map<uint64_t, std::unique_ptr<TLS::Connection>> tls_conns_;
+    };
 };

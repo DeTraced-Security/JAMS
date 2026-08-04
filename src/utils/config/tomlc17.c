@@ -1,7 +1,8 @@
 /* Copyright (c) 2024-2026, CK Tan.
  * https://github.com/cktan/tomlc17/blob/main/LICENSE
  */
-#include "tomlc17.h"
+#include "config/tomlc17.h"
+
 #include <assert.h>
 #include <ctype.h>
 #include <errno.h>

@@ -13,7 +13,7 @@
 #include <openssl/err.h>
 
 namespace DKIM {
-    class DKIMSigner {
+    class Signer {
         public:
 
             enum class Canonicalization {
@@ -37,11 +37,11 @@ namespace DKIM {
                 uint64_t signature_expiry = 86400;
             };
 
-            explicit DKIMSigner(const Config& config);
-            ~DKIMSigner();
+            explicit Signer(const Config& config);
+            ~Signer();
 
-            DKIMSigner(const DKIMSigner&) = delete;
-            DKIMSigner& operator=(const DKIMSigner&) = delete;
+            Signer(const Signer&) = delete;
+            Signer& operator=(const Signer&) = delete;
 
             /**
              * @brief Signs an RFC-5322 message

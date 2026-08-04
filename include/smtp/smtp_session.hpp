@@ -9,42 +9,43 @@
 
 class IoUringLoop;
 
-enum class SMTPState {
-    Connected,
-    Greeted,
-    Mail,
-    RCPT,
-    Data,
-    Done,
-};
+namespace SMTP {
+    enum class SMTPState {
+        Connected,
+        Greeted,
+        Mail,
+        RCPT,
+        Data,
+        Done,
+    };
 
-struct Envelope {
-    std::string mail_from;
-    std::vector<std::string> rcpt_to;
-    std::string body;
-};
+    struct Envelope {
+        std::string mail_from;
+        std::vector<std::string> rcpt_to;
+        std::string body;
+    };
 
-class SMTPSession : public Session {
+    class Session : public SessionFactory {
     public:
         /// @brief Creates the SMTP Session
         /// @param conn_id 
         /// @param remote_ip 
         /// @param loop 
-        SMTPSession(
+        Session(
             uint64_t conn_id,
             std::string remote_ip,
-            IoUringLoop& loop, Aliases& aliases
+            Async::IoUringLoop& loop, Auth::Aliases& aliases
         );
 
         /// @brief Handles events that receive on-wire data
         /// @param bytes 
         void on_data(std::span<const uint8_t> bytes);
 
-        bool pending_close_{false};
+        bool pending_close_{ false };
         bool wants_close() const {
             return pending_close_;
         }
-        
+
     private:
         /// @brief Helper function to strip headers from the body of an email
         /// @param body 
@@ -121,14 +122,16 @@ class SMTPSession : public Session {
 
         uint64_t conn_id_;
         std::string remote_ip_;
-        IoUringLoop& loop_;
-        Aliases& aliases_;
+        Async::IoUringLoop& loop_;
+        Auth::Aliases& aliases_;
 
-        SMTPState state_{SMTPState::Connected};
+        SMTPState state_{ SMTPState::Connected };
         std::string line_buf;
         Envelope env_;
         std::string client_helo_;
 
         std::string data_tail_;
         bool tls_upgrade_pending_ = false;
+    };
+
 };

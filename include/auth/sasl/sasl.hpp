@@ -1,6 +1,7 @@
 #pragma once
 
 #include "auth/credentials/cred_store.hpp"
+
 #include <functional>
 #include <optional>
 #include <string>

@@ -1,7 +1,9 @@
 #pragma once
 
-#include "types.hpp"
-#include "message.hpp"
+#include "dns/types.hpp"
+#include "dns/message.hpp"
+#include "io/io_uring_loop.hpp"
+
 #include <liburing.h>
 #include <netinet/in.h>
 #include <cstdint>
@@ -13,7 +15,7 @@
 #include <unordered_map>
 #include <vector>
 
-class IoUringLoop;
+class Async::IoUringLoop;
 
 namespace DNS {
     using ResolveCallback = std::function<void(ResolveResult)>;
@@ -88,13 +90,13 @@ namespace DNS {
     //   If the response has the TC (truncated) bit set, the query is retried over
     //   TCP.
 
-    class DNSResolver {
+    class Resolver {
         public:
-            DNSResolver(const std::string& nameserver, io_uring* ring);
-            ~DNSResolver();
+            Resolver(const std::string& nameserver, io_uring* ring);
+            ~Resolver();
 
-            DNSResolver(const DNSResolver&) = delete;
-            DNSResolver& operator=(const DNSResolver&) = delete;
+            Resolver(const Resolver&) = delete;
+            Resolver& operator=(const Resolver&) = delete;
 
             void resolve(const std::string& name, RRType type, ResolveCallback callback);
 

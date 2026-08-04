@@ -3,6 +3,7 @@
 #include "dns/resolver.hpp"
 #include "auth/spf/checker.hpp"
 #include "auth/dkim/verifier.hpp"
+
 #include <functional>
 #include <string>
 #include <vector>
@@ -55,7 +56,7 @@ namespace DMARC {
     //   checker.check(
     //       from_domain,         // domain from RFC 5322 From: header
     //       mail_from_domain,    // envelope sender domain (for SPF alignment)
-    //       spf_result,          // result from SpfChecker
+    //       spf_result,          // result from Checker
     //       dkim_results,        // results from DkimVerifier (all signatures)
     //       [](dmarc::CheckResult r) {
     //           if (r.result == dmarc::Result::Fail &&
@@ -79,9 +80,9 @@ namespace DMARC {
     //   rather than randomly, for reproducibility.
     //
     // Threading: single-threaded; all calls from the io_uring event loop thread
-    class DMARCChecker {
+    class Checker {
         public:
-            explicit DMARCChecker(DNS::DNSResolver& resolver);
+            explicit Checker(DNS::Resolver& resolver);
 
             /// @brief Check and validate the DMARC records to maintain integrity with the RFC
             /// @param from_domain 
@@ -155,6 +156,6 @@ namespace DMARC {
                 bool spf_aligned, bool dkim_aligned, std::string explanation = ""
             );
 
-            DNS::DNSResolver& resolver_;
+            DNS::Resolver& resolver_;
     };
 };

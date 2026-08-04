@@ -1,4 +1,6 @@
-#include "maildir.hpp"
+#include "storage/maildir.hpp"
+#include "globals.hpp"
+
 #include <unistd.h>
 #include <sys/types.h>
 #include <chrono>
@@ -7,7 +9,8 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>
-#include "globals.hpp"
+
+using namespace Storage;
 
 MailDir::MailDir(std::string base_path) : base_(std::move(base_path)) {};
 
@@ -15,11 +18,11 @@ bool MailDir::ensure_dirs() {
     namespace fs = std::filesystem;
 
     std::error_code ec;
-    for (const char* sub : {"tmp", "new", "cur"}) {
+    for (const char* sub : { "tmp", "new", "cur" }) {
         fs::create_directories(base_ / sub, ec);
         if (ec) {
             logger.debug("[MAILDIR] create_directories(" + std::string((base_ / sub)) + "): " + ec.message());
-            
+
             return false;
         }
     }
@@ -29,7 +32,7 @@ bool MailDir::ensure_dirs() {
 
 std::optional<std::string> MailDir::deliver(
     const std::string& mail_from,
-    const std::string& rcpt_to, 
+    const std::string& rcpt_to,
     const std::string& body
 ) {
     if (!ensure_dirs()) {
@@ -45,11 +48,11 @@ std::optional<std::string> MailDir::deliver(
     if (localtime_r(&now_t, &tm_buf) == nullptr) {
         logger.error("[MAILDIR] localtime_r failed: " + std::string(strerror(errno)));
         return "";
-    }    
+    }
 
     // RFC-2822 date format:
     std::strftime(
-        date_buf, sizeof(date_buf), 
+        date_buf, sizeof(date_buf),
         "%a, %d %b %Y %H:%M:%S %z",
         &tm_buf
     );
@@ -82,19 +85,19 @@ std::optional<std::string> MailDir::deliver(
     auto new_path = base_ / "new" / fname;
     std::error_code ec;
     std::filesystem::rename(tmp_path, new_path, ec);
-    
+
     if (ec) {
         logger.error("[MAILDIR] Rename to new/ faield: " + ec.message());
 
         std::filesystem::remove(tmp_path, ec);
         return "";
     }
-    
+
     logger.info("[MAILDIR] Delivered to " + std::string(new_path.c_str()));
     return std::string(new_path.c_str());
 }
 
-bool MailDir::is_safe(const std::string &addr) {
+bool MailDir::is_safe(const std::string& addr) {
     if (addr.empty() || addr.size() > 64) {
         return false;
     }
@@ -138,7 +141,8 @@ std::string MailDir::unique_filename(size_t body_size) const {
 
     if (::gethostname(hostname, sizeof(hostname)) != 0) {
         logger.error("[MAILDIR] gethostname failed: " + std::string(strerror(errno)) + "; using fallback hostname 'localhost'");
-    } else {
+    }
+    else {
         hostname[sizeof(hostname) - 1] = '\0';
     }
 
@@ -156,7 +160,7 @@ std::string MailDir::unique_filename(size_t body_size) const {
         << "." << hostname
         << ",S=" << body_size
         << ":2,";   // Maildir++ flags field (empty = no flags)
-    
+
     return oss.str();
 }
 

@@ -4,6 +4,7 @@
 #include "io/session_factory.hpp"
 #include "auth/credentials/cred_store.hpp"
 #include "storage/maildir.hpp"
+
 #include <cstdint>
 #include <functional>
 #include <optional>
@@ -11,49 +12,50 @@
 #include <string>
 #include <vector>
 
-enum class State {
-    NotAuthenticated,
-    Authenticated,
-    Selected,
-    Logout,
-};
+namespace IMAP {
+    enum class State {
+        NotAuthenticated,
+        Authenticated,
+        Selected,
+        Logout,
+    };
 
-struct MessageMeta {
-    uint32_t uuid; // derived from file timestamp
-    uint32_t seq; // sequence number from session
-    std::string filename;
-    std::string flags; // IMAP Flags: \Seen, \Answered, \Flagged, \Deleted
-    size_t size; // blob size in bytes
-    bool in_cur{false};
-};
+    struct MessageMeta {
+        uint32_t uuid; // derived from file timestamp
+        uint32_t seq; // sequence number from session
+        std::string filename;
+        std::string flags; // IMAP Flags: \Seen, \Answered, \Flagged, \Deleted
+        size_t size; // blob size in bytes
+        bool in_cur{ false };
+    };
 
 
-// Implements the alpha command set:
-//   Any state:       CAPABILITY NOOP LOGOUT
-//   Not authed:      STARTTLS LOGIN
-//   Authenticated:   SELECT EXAMINE LIST LSUB STATUS
-//   Selected:        FETCH STORE EXPUNGE CHECK CLOSE IDLE
-//
-// Zero-access storage:
-//   The server never decrypts message bodies. FETCH BODY[] returns the raw
-//   AES-256-GCM blob. Clients identify encrypted messages via the
-//   X-JAMS-Encrypted header and decrypt locally.
-//
-// IDLE (RFC 2177):
-//   Client sends IDLE -> server sends "+ idling"
-//   Server polls Maildir/new/ every IDLE_POLL_MS milliseconds
-//   On new mail: sends "* N EXISTS"
-//   Client sends DONE -> server responds OK
-//
-// State machine:
-//   NotAuthenticated -> Authenticated (after LOGIN)
-//   Authenticated    -> Selected (after SELECT/EXAMINE)
-//   Selected         -> Authenticated (after CLOSE)
-//   Any              -> Logout (after LOGOUT)
-class IMAPSession : public Session {
+    // Implements the alpha command set:
+    //   Any state:       CAPABILITY NOOP LOGOUT
+    //   Not authed:      STARTTLS LOGIN
+    //   Authenticated:   SELECT EXAMINE LIST LSUB STATUS
+    //   Selected:        FETCH STORE EXPUNGE CHECK CLOSE IDLE
+    //
+    // Zero-access storage:
+    //   The server never decrypts message bodies. FETCH BODY[] returns the raw
+    //   AES-256-GCM blob. Clients identify encrypted messages via the
+    //   X-JAMS-Encrypted header and decrypt locally.
+    //
+    // IDLE (RFC 2177):
+    //   Client sends IDLE -> server sends "+ idling"
+    //   Server polls Maildir/new/ every IDLE_POLL_MS milliseconds
+    //   On new mail: sends "* N EXISTS"
+    //   Client sends DONE -> server responds OK
+    //
+    // State machine:
+    //   NotAuthenticated -> Authenticated (after LOGIN)
+    //   Authenticated    -> Selected (after SELECT/EXAMINE)
+    //   Selected         -> Authenticated (after CLOSE)
+    //   Any              -> Logout (after LOGOUT)
+    class Session : public SessionFactory {
     public:
-        IMAPSession(
-            uint64_t conn_id, std::string remote_ip, IoUringLoop& loop,
+        Session(
+            uint64_t conn_id, std::string remote_ip, Async::IoUringLoop& loop,
             Auth::CredentialStore& cred_store, const std::string& mail_root
         );
 
@@ -62,7 +64,7 @@ class IMAPSession : public Session {
         void on_data(std::span<const uint8_t> bytes);
 
         bool wants_close() const override {
-            return state_ == State::Logout;  
+            return state_ == State::Logout;
         }
 
     private:
@@ -88,26 +90,26 @@ class IMAPSession : public Session {
 
 
         void complete_plain_auth(const std::string& tag, const std::string& b64);
-        
+
         void cmd_select(
             const std::string& tag, const std::string& mailbox,
             bool read_only
         );
 
         void cmd_list(const std::string& tag, const std::string& args);
-        
+
         void cmd_lsub(const std::string& tag, const std::string& args);
-        
+
         void cmd_status(const std::string& tag, const std::string& args);
-        
+
         void cmd_fetch(const std::string& tag, const std::string& args);
-        
+
         void cmd_store(const std::string& tag, const std::string& args);
-        
+
         void cmd_expunge(const std::string& tag);
-        
+
         void cmd_check(const std::string& tag);
-        
+
         void cmd_close(const std::string& tag);
 
         void cmd_uid_search(const std::string& tag, const std::string& args);
@@ -184,25 +186,25 @@ class IMAPSession : public Session {
         void untagged(const std::string& data);
 
         /// @brief "JAMS" in hexadecimal
-        static constexpr uint32_t IMAP_UUID_VALIDITY = 0x4A414D53; 
+        static constexpr uint32_t IMAP_UUID_VALIDITY = 0x4A414D53;
 
         uint64_t conn_id_;
         std::string remote_ip_;
-        IoUringLoop& loop_;
+        Async::IoUringLoop& loop_;
         Auth::CredentialStore& cred_store_;
         std::string mail_root_; // i.e. /var/mail/vhosts
 
-        State state_{State::NotAuthenticated};
+        State state_{ State::NotAuthenticated };
         std::string line_buf_;
         std::string username_;
         std::string selected_mailbox_;
-        bool read_only_{false};
-        bool auth_pending_{false};
+        bool read_only_{ false };
+        bool auth_pending_{ false };
         std::string auth_tag_;
 
         // APPEND ingestion state
-        bool literal_pending_{false};
-        size_t literal_remaining_{0};
+        bool literal_pending_{ false };
+        size_t literal_remaining_{ 0 };
         std::vector<uint8_t> literal_buf_;
         std::string append_tag_;
         std::string append_mailbox_;
@@ -210,5 +212,6 @@ class IMAPSession : public Session {
         static std::atomic<uint32_t> append_seq_;
 
         std::vector<MessageMeta> messages_;
-        uint32_t next_uuid_{1}; // The next UUID to assign
+        uint32_t next_uuid_{ 1 }; // The next UUID to assign
+    };
 };

@@ -3,9 +3,10 @@
 #include "smtp/smtp_session.hpp"
 #include "smtp/submission_server.hpp"
 #include "imap/session.hpp"
-#include "config/toml_parse.hpp"
+#include "utils/config/toml_parse.hpp"
 #include "globals.hpp"
 #include "auth/credentials/aliases.hpp"
+
 #include <csignal>
 #include <cstring>
 #include <stdexcept>
@@ -24,8 +25,8 @@ static void handle_signal(int sig) {
     g_shutdown = 1;
 
     // Write sig number to stderr without ynsafe async functions
-    const char* msg = (sig == SIGINT) 
-        ? "\n[JAMS] SIGINT received... Shutting down\n" 
+    const char* msg = (sig == SIGINT)
+        ? "\n[JAMS] SIGINT received... Shutting down\n"
         : "\n[JAMS] SIGTERM received... Shutting down\n";
 
     ssize_t is_ok = write(STDERR_FILENO, msg, strlen(msg));
@@ -73,7 +74,7 @@ int main(int argc, char* argv[]) {
     }
 
     Config cfg;
-    
+
     for (auto& p : configs) {
         if (p.first == "smtp") {
             cfg.smtp_port = std::stoi(p.second);
@@ -95,7 +96,7 @@ int main(int argc, char* argv[]) {
     banner();
 
     // Signal monitor setup
-    struct sigaction sig_action{};
+    struct sigaction sig_action {};
     sig_action.sa_handler = handle_signal;
     sigemptyset(&sig_action.sa_mask);
     sig_action.sa_flags = SA_RESTART;
@@ -112,16 +113,16 @@ int main(int argc, char* argv[]) {
 
     if (cred_store.db_ == nullptr) {
         logger.error(
-            "[FATAL] [JAMS] Could not open database: " + cfg.db_path + 
+            "[FATAL] [JAMS] Could not open database: " + cfg.db_path +
             "\n        create the directory first:\n" +
             "        sudo mkdir -p /var/lib/jams\n" +
             "        sudo chown $USER /var/lib/jams"
         );
-        
+
         return 1;
     }
 
-    
+
     if (argc > 1 && std::string(argv[1]) == "--add-user") {
         if (argc != 4) {
             logger.error("CLI Usage: " + std::string(argv[0]) + " --add-user <username> <password");
@@ -142,21 +143,21 @@ int main(int argc, char* argv[]) {
 
         logger.info("[JAMS] User '" + username + "' created successfully");
     }
-    
-    Aliases aliases(cred_store);
+
+    Auth::Aliases aliases(cred_store);
 
     // SMTP inbound loop
     logger.info("[JAMS] Starting SMTP inbound on port: " + std::to_string(cfg.smtp_port));
     logger.info("[JAMS] Hostname: " + JAMS_HOSTNAME);
     logger.info("[JAMS] Ready\n");
 
-    std::atomic<bool> server_failed{false};
+    std::atomic<bool> server_failed{ false };
 
     std::thread smtp_thread([&]() {
         try {
-            IoUringLoop smtp_loop(cfg.smtp_port, [&aliases](uint64_t id, const std::string& ip, IoUringLoop& loop) {
-                return std::make_unique<SMTPSession>(id, ip, loop, aliases);
-            });
+            Async::IoUringLoop smtp_loop(cfg.smtp_port, [&aliases](uint64_t id, const std::string& ip, Async::IoUringLoop& loop) {
+                return std::make_unique<SMTP::Session>(id, ip, loop, aliases);
+                });
 
             smtp_loop.arm_periodic_timer(std::chrono::seconds(60), [&aliases]() {
                 aliases.reap_expired();
@@ -164,58 +165,63 @@ int main(int argc, char* argv[]) {
                 for (auto& [id, path] : aliases.due_purges()) {
                     if (std::remove(path.c_str()) == 0) {
                         aliases.mark_purged(id);
-                    } else {
+                    }
+                    else {
                         logger.error("[PURGE] Failed to remove: " + path);
                     }
                 }
-            });
+                });
 
             smtp_loop.run();
-        } catch (const std::exception& ex) {
+        }
+        catch (const std::exception& ex) {
             logger.error("[FATAL] [JAMS] SMTP Loop: " + std::string(ex.what()));
             server_failed = true;
-            g_shutdown = 1;  
+            g_shutdown = 1;
         }
-    });
+        });
 
     std::thread submission_thread([&]() {
         try {
-            IoUringLoop submission_loop(cfg.submission_port, [&cred_store, &aliases](uint64_t id, const std::string& ip, IoUringLoop& loop) {
-                return std::make_unique<SubmissionServer>(id, ip, loop, cred_store, aliases);
-            });
+            Async::IoUringLoop submission_loop(cfg.submission_port, [&cred_store, &aliases](uint64_t id, const std::string& ip, Async::IoUringLoop& loop) {
+                return std::make_unique<SMTP::SubmissionServer>(id, ip, loop, cred_store, aliases);
+                });
             submission_loop.run();
-        } catch(const std::exception& ex) {
+        }
+        catch (const std::exception& ex) {
             logger.error("[FATAL] [JAMS] Submission Loop: " + std::string(ex.what()));
             server_failed = true;
             g_shutdown = 1;
         }
-    });
+        });
 
     std::thread imap4_thread([&]() {
         try {
-            IoUringLoop imap4_loop(cfg.imap4_port, [&cred_store, &aliases](uint64_t id, const std::string& ip, IoUringLoop& loop) {
-                return std::make_unique<IMAPSession>(id, ip, loop, cred_store, get_mailroot());
-            });
+            Async::IoUringLoop imap4_loop(cfg.imap4_port, [&cred_store, &aliases](uint64_t id, const std::string& ip, Async::IoUringLoop& loop) {
+                return std::make_unique<IMAP::Session>(id, ip, loop, cred_store, get_mailroot());
+                });
             imap4_loop.run();
-        } catch (const std::exception& ex) {
+        }
+        catch (const std::exception& ex) {
             logger.error("[FATAL] [JAMS] IMAP4 Loop: " + std::string(ex.what()));
             server_failed = true;
             g_shutdown = 1;
         }
-    });
+        });
 
     std::thread imap4_secure_thread([&]() {
         try {
-            IoUringLoop imap4_secure_loop(cfg.imap4_secure_port, [&cred_store](uint64_t id, const std::string& ip, IoUringLoop& loop) {
-                return std::make_unique<IMAPSession>(id, ip, loop, cred_store, get_mailroot());
-            });
+            Async::IoUringLoop imap4_secure_loop(cfg.imap4_secure_port, [&cred_store](uint64_t id, const std::string& ip, Async::IoUringLoop& loop) {
+                return std::make_unique<IMAP::Session>(id, ip, loop, cred_store, get_mailroot());
+                });
             imap4_secure_loop.run();
-        } catch (const std::exception& ex) {
+        }
+        catch (const std::exception& ex) {
             logger.error("[FATAL] [JAMS] IMAP4 Secure Loop: " + std::string(ex.what()));
             server_failed = true;
             raise(SIGTERM);
         }
-    });
+        });
 
     smtp_thread.join();
     submission_thread.join();

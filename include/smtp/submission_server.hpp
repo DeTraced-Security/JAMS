@@ -4,18 +4,19 @@
 #include "auth/credentials/cred_store.hpp"
 #include "auth/dkim/signer.hpp"
 #include "io/session_factory.hpp"
-#include "smtp_session.hpp"
+#include "smtp/smtp_session.hpp"
 #include "auth/credentials/aliases.hpp"
+
 #include <cstdint>
 #include <memory>
 #include <span>
 #include <string>
 
-class IoUringLoop;
+class Async::IoUringLoop;
 
 // SMTP submission session for port 587 (RFC 6409).
 //
-// Differences from SmtpSession (port 25):
+// Differences from SMTP::Session (port 25):
 //   1. AUTH is required before MAIL FROM
 //   2. EHLO advertises AUTH PLAIN LOGIN (only after STARTTLS)
 //   3. Outbound messages are DKIM-signed before queuing
@@ -28,33 +29,37 @@ class IoUringLoop;
 // TLS requirement:
 //   AUTH is only advertised after STARTTLS. If a client attempts AUTH
 //   before TLS is established, we respond with 538 (encryption required).
-class SubmissionServer : public Session {
+namespace SMTP
+{
+    class SubmissionServer : public SessionFactory
+    {
     public:
         SubmissionServer(
             uint64_t conn_id, const std::string& remote_ip,
-            IoUringLoop& loop, Auth::CredentialStore& store,
-            Aliases& aliases
-        );
+            Async::IoUringLoop& loop, Auth::CredentialStore& store,
+            Auth::Aliases& aliases);
 
         /// @brief Called by io_uring when bytes arrive
-        /// @param bytes 
+        /// @param bytes
         void on_data(std::span<const uint8_t> bytes);
 
         /// @brief Called by io_uring when the TLS handshake completes
         void on_tls_established();
 
         /// @brief Calls out to SASL to check if the connection is authenticated
-        /// @return 
-        bool is_authenticated() const {
+        /// @return
+        bool is_authenticated() const
+        {
             return sasl_.authenticated();
         }
 
-        bool wants_close() const override {
+        bool wants_close() const override
+        {
             return pending_close_;
         }
-    
+
     private:
-        DKIM::DKIMSigner dkim_signer_;
+        DKIM::Signer dkim_signer_;
 
         /// @brief Helper overload function to extract email addresses from a body
         /// used when handling BCC/CC
@@ -64,38 +69,37 @@ class SubmissionServer : public Session {
         auto extract_address(const std::string& body, const std::string& header_name);
 
         /// @brief Helper function to strip headers from the body of an email
-        /// @param body 
-        /// @param header_name 
-        /// @return 
+        /// @param body
+        /// @param header_name
+        /// @return
         auto strip_header(const std::string& body, const std::string& header_name);
-        
+
         bool relay_outbound(
             const std::string& from, const std::string& to,
-            const std::string& domain, const std::string& body
-        );
+            const std::string& domain, const std::string& body);
 
         /// @brief Processes commands received from on-wire data
-        /// @param line 
+        /// @param line
         void process_line(std::string_view line);
 
         /// @brief Sends back HELO request to the sender
-        /// @param arg 
+        /// @param arg
         void cmd_ehlo(std::string_view arg);
 
         /// @brief Sends HELO request to the receiver
-        /// @param arg 
+        /// @param arg
         void cmd_helo(std::string_view arg);
 
         /// @brief Handles on-wire data relating to FROM sender
-        /// @param arg 
+        /// @param arg
         void cmd_mail(std::string_view arg);
 
         /// @brief Handles on-wire data relating to Recipient(s)
-        /// @param arg 
+        /// @param arg
         void cmd_rcpt(std::string_view arg);
 
         /// @brief Force Authentication over TLS then authenticate
-        /// @param arg 
+        /// @param arg
         void cmd_auth(std::string_view arg);
 
         /// @brief Handles overall mail data structure
@@ -114,37 +118,37 @@ class SubmissionServer : public Session {
         void cmd_starttls();
 
         /// @brief Hands over Submission replies to io_uring
-        /// @param text 
+        /// @param text
         void reply(int code, std::string_view text);
-        
+
         /// @brief Hands multiline Submission replies over to io_uring with specific codes
-        /// @param code 
-        /// @param lines 
+        /// @param code
+        /// @param lines
         void reply_multiline(int code, const std::vector<std::string>& lines);
 
-        
         /// @brief Delivers mail to the recipient
-        /// @return 
+        /// @return
         bool deliver();
 
         /// @brief Trims unwanted data from the given string
-        /// @param sv 
-        /// @return 
+        /// @param sv
+        /// @return
         static std::string_view trim(std::string_view sv);
 
         /// @brief Extracts domain name from user@domain variants
-        /// @param arg 
-        /// @return 
+        /// @param arg
+        /// @return
         static std::string_view extract_address(std::string_view arg);
 
         uint64_t conn_id_;
         std::string remote_ip_;
-        IoUringLoop& loop_;
+        Async::IoUringLoop& loop_;
         Auth::SASLSession sasl_;
-        Aliases& aliases_;
+        Auth::Aliases& aliases_;
 
         /// @brief Submission States
-        enum class State {
+        enum class State
+        {
             Connected,
             Greeted,
             Authenticated,
@@ -154,14 +158,15 @@ class SubmissionServer : public Session {
             Done
         };
 
-        State state_{State::Connected};
-        bool tls_active_{false};
+        State state_{ State::Connected };
+        bool tls_active_{ false };
         std::string line_buf_;
         std::string data_tail_;
 
-        bool pending_close_{false};
+        bool pending_close_{ false };
 
-        struct Envelope {
+        struct Envelope
+        {
             std::string mail_from;
             std::vector<std::string> rcpt_to;
             std::string body;
@@ -171,4 +176,5 @@ class SubmissionServer : public Session {
         std::string client_helo_;
 
         bool tls_upgrade_pending_ = false;
-};
+    };
+}

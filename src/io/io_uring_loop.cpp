@@ -1,21 +1,19 @@
-#include "io_uring_loop.hpp"
+#include "io/io_uring_loop.hpp"
 #include "smtp/smtp_session.hpp"
 #include "dns/resolver.hpp"
 #include "globals.hpp"
-
 #include <liburing.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <fcntl.h>
- 
 #include <cstring>
 #include <stdexcept>
 #include <iostream>
 #include <cassert>
 
-IoUringLoop::IoUringLoop(
+Async::IoUringLoop::IoUringLoop(
     uint16_t port, SessionFactory factory, unsigned queue_depth
 ) : port_(port), session_factory_(std::move(factory)) {
     io_uring_params params{};
@@ -23,7 +21,7 @@ IoUringLoop::IoUringLoop(
 
     int ret = io_uring_queue_init_params(queue_depth, &ring_, &params);
 
-    if (ret < 0) { 
+    if (ret < 0) {
         throw std::runtime_error(
             std::string("io_uring_queue_init failed: ") + strerror(-ret)
         );
@@ -34,34 +32,36 @@ IoUringLoop::IoUringLoop(
     logger.info(
         "[io_uring] features: "
         + std::string(((params.features & IORING_FEAT_FAST_POLL) ? "FAST_POLL " : ""))
-        + std::string(((params.features & IORING_FEAT_NODROP)    ? "NODROP "    : ""))
+        + std::string(((params.features & IORING_FEAT_NODROP) ? "NODROP " : ""))
     );
 
     // Initialise TLS:
     const std::string cert = "/etc/jams/tls/cert.pem";
     const std::string key = "/etc/jams/tls/key.pem";
-    
+
     try {
-        tls_ctx_ = std::make_unique<TlsContext>(cert, key);
+        tls_ctx_ = std::make_unique<TLS::Context>(cert, key);
         logger.info("[TLS] Context loaded from: " + cert);
-    } catch (const std::exception& ex) {
+    }
+    catch (const std::exception& ex) {
         logger.error("[TLS] Failed to load key/cert: " + std::string(ex.what()));
         std::abort();
     }
 
     // Initialise DNS Resolver
     try {
-        dns_resolver_ = std::make_unique<DNS::DNSResolver>("1.1.1.1", &ring_);
-    } catch (const std::exception& ex) {
+        dns_resolver_ = std::make_unique<DNS::Resolver>("1.1.1.1", &ring_);
+    }
+    catch (const std::exception& ex) {
         logger.error("[DNS] WARNING: Resolver failed to initialise: " + std::string(ex.what()));
     }
 
     setup_listen_socket();
 }
 
-static_assert(sizeof(SMTPSession) > 0); 
+static_assert(sizeof(SMTP::Session) > 0);
 
-IoUringLoop::~IoUringLoop() {
+Async::IoUringLoop::~IoUringLoop() {
     if (ring_initialized_) {
         io_uring_queue_exit(&ring_);
         if (listen_fd_ >= 0) {
@@ -70,14 +70,14 @@ IoUringLoop::~IoUringLoop() {
     }
 }
 
-void IoUringLoop::arm_periodic_timer(std::chrono::seconds interval, std::function<void()> callback) {
+void Async::IoUringLoop::arm_periodic_timer(std::chrono::seconds interval, std::function<void()> callback) {
     uint64_t timer_id = timer_next_id_++;
 
     __kernel_timespec ts{};
     ts.tv_nsec = 0;
     ts.tv_sec = interval.count();
 
-    auto [itr, _] = timers_.try_emplace(timer_id, PeriodicTimer{ts, std::move(callback)});
+    auto [itr, _] = timers_.try_emplace(timer_id, PeriodicTimer{ ts, std::move(callback) });
 
     io_uring_sqe* sqe = get_sqe();
     io_uring_prep_timeout(sqe, &itr->second.ts, 0, 0);
@@ -85,7 +85,7 @@ void IoUringLoop::arm_periodic_timer(std::chrono::seconds interval, std::functio
     submit();
 }
 
-void IoUringLoop::on_timer(uint64_t timer_id, int res) {
+void Async::IoUringLoop::on_timer(uint64_t timer_id, int res) {
     auto itr = timers_.find(timer_id);
     if (itr == timers_.end()) {
         return;
@@ -113,7 +113,7 @@ void IoUringLoop::on_timer(uint64_t timer_id, int res) {
     submit();
 }
 
-void IoUringLoop::setup_listen_socket()
+void Async::IoUringLoop::setup_listen_socket()
 {
     listen_fd_ = ::socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
     if (listen_fd_ < 0) {
@@ -128,7 +128,7 @@ void IoUringLoop::setup_listen_socket()
     ::setsockopt(listen_fd_, SOL_SOCKET, SO_REUSEPORT, &one, sizeof(one));
 
     sockaddr_in addr{};
-    addr.sin_family  = AF_INET;
+    addr.sin_family = AF_INET;
     addr.sin_port = htons(port_);
     addr.sin_addr.s_addr = INADDR_ANY;
 
@@ -148,18 +148,22 @@ void IoUringLoop::setup_listen_socket()
 
     if (port_ == 25) {
         logger.info("[SMTP] Listening on port: " + std::to_string(port_));
-    } else if (port_ == 587) {
+    }
+    else if (port_ == 587) {
         logger.info("[SUBMISSION] Listening on port: " + std::to_string(port_));
-    } else if(port_ == 143) {
+    }
+    else if (port_ == 143) {
         logger.info("[IMAP4] Listening on port: " + std::to_string(port_));
-    } else if (port_ == 993) {
+    }
+    else if (port_ == 993) {
         logger.info("[IMAP4S] Listening on port: " + std::to_string(port_));
-    } else {
+    }
+    else {
         logger.info("[CUSTOMPORT] Listening on port: " + std::to_string(port_));
     }
 }
 
-void IoUringLoop::arm_accept() {
+void Async::IoUringLoop::arm_accept() {
     client_addr_len_ = sizeof(client_addr_);
     io_uring_sqe* sqe = get_sqe();
     io_uring_prep_accept(
@@ -172,7 +176,7 @@ void IoUringLoop::arm_accept() {
     submit();
 }
 
-void IoUringLoop::run() {
+void Async::IoUringLoop::run() {
     arm_accept();
 
     io_uring_cqe* cqe = nullptr;
@@ -212,26 +216,26 @@ void IoUringLoop::run() {
                 continue;
             }
 
-            
+
             op_type op = decode_op(ud);
             uint64_t conn_id = decode_conn_id(ud);
 
             switch (op) {
-                case op_type::Accept: 
-                    on_accept(0, res);
-                    break;
-                case op_type::Read:
-                    on_read(conn_id, res);
-                    break;
-                case op_type::Write:
-                    on_write(conn_id, res);
-                    break;
-                case op_type::Close:
-                    submit_close(conn_id);
-                    break;
-                case op_type::Timer: 
-                    on_timer(conn_id, res);
-                    break;
+            case op_type::Accept:
+                on_accept(0, res);
+                break;
+            case op_type::Read:
+                on_read(conn_id, res);
+                break;
+            case op_type::Write:
+                on_write(conn_id, res);
+                break;
+            case op_type::Close:
+                submit_close(conn_id);
+                break;
+            case op_type::Timer:
+                on_timer(conn_id, res);
+                break;
             }
         }
 
@@ -241,7 +245,7 @@ void IoUringLoop::run() {
     logger.info("[IO_URING] Loop exiting on port: " + std::to_string(port_));
 }
 
-void IoUringLoop::on_accept(int /*fd*/, int res) {
+void Async::IoUringLoop::on_accept(int /*fd*/, int res) {
     // Always re-arm accept first so we don't miss new connections
     arm_accept();
 
@@ -277,12 +281,12 @@ void IoUringLoop::on_accept(int /*fd*/, int res) {
     sqe->user_data = encode_userdata(op_type::Read, cid);
 
     logger.info("[ACCEPT] conn=" + std::to_string(cid) + "\n\tfd=" + std::to_string(client_fd) + " from=" + ip_buf);
-    
+
     buf.inflight++;
     submit();
 }
 
-void IoUringLoop::on_read(uint64_t conn_id, int res) {
+void Async::IoUringLoop::on_read(uint64_t conn_id, int res) {
     auto bit = buffers_.find(conn_id);
     auto sit = sessions_.find(conn_id);
 
@@ -316,14 +320,15 @@ void IoUringLoop::on_read(uint64_t conn_id, int res) {
                 submit_write(conn_id, std::move(to_send), true);
             }
         }
-        catch(const std::exception& e)
+        catch (const std::exception& e)
         {
             logger.error("[TLS] conn=" + std::to_string(conn_id) + " feed error:\n\t" + std::string(e.what()));
             submit_close(conn_id);
             return;
         }
-        
-    } else {
+
+    }
+    else {
         sit->second->on_data(data);
     }
 
@@ -348,12 +353,13 @@ void IoUringLoop::on_read(uint64_t conn_id, int res) {
         sqe->user_data = encode_userdata(op_type::Read, conn_id);
         bit->second.inflight++;
         submit();
-    } else {
+    }
+    else {
         submit_close(conn_id);
     }
 }
 
-void IoUringLoop::on_write(uint64_t conn_id, int res) {
+void Async::IoUringLoop::on_write(uint64_t conn_id, int res) {
     logger.error("[ON_WRITE] conn=" + std::to_string(conn_id) + " res=" + std::to_string(res));
     auto bit = buffers_.find(conn_id);
     if (bit == buffers_.end()) {
@@ -377,7 +383,8 @@ void IoUringLoop::on_write(uint64_t conn_id, int res) {
     // Send the next queued write
     if (!bit->second.write_queue.empty() && !bit->second.closing) {
         flush_write(conn_id);
-    } else if (bit->second.closing) {
+    }
+    else if (bit->second.closing) {
         logger.debug(
             "[ON_WRITE] Deffered Close: conn=" + std::to_string(conn_id)
             + " inflight=" + std::to_string(bit->second.inflight)
@@ -387,9 +394,9 @@ void IoUringLoop::on_write(uint64_t conn_id, int res) {
     }
 }
 
-void IoUringLoop::flush_write(uint64_t conn_id) {
+void Async::IoUringLoop::flush_write(uint64_t conn_id) {
     logger.debug(
-        "[FLUSH_WRITE] conn=" + std::to_string(conn_id) + 
+        "[FLUSH_WRITE] conn=" + std::to_string(conn_id) +
         " queue_size=" + std::to_string(buffers_[conn_id].write_queue.size())
     );
 
@@ -411,9 +418,9 @@ void IoUringLoop::flush_write(uint64_t conn_id) {
     submit();
 }
 
-void IoUringLoop::submit_write(uint64_t conn_id, std::vector<uint8_t> data, bool raw) {
+void Async::IoUringLoop::submit_write(uint64_t conn_id, std::vector<uint8_t> data, bool raw) {
     auto bit = buffers_.find(conn_id);
-    
+
     if (bit == buffers_.end()) {
         logger.warn("[SUBMIT_WRITE] Buffer is empty!");
         return;
@@ -426,7 +433,8 @@ void IoUringLoop::submit_write(uint64_t conn_id, std::vector<uint8_t> data, bool
         if (tit != tls_conns_.end() && tit->second->handshake_done()) {
             try {
                 data = tit->second->encrypt(data);
-            } catch (const std::exception& ex) {
+            }
+            catch (const std::exception& ex) {
                 logger.error("[TLS] conn=" + std::to_string(conn_id) + " encrypt error:\n\t" + std::string(ex.what()));
 
                 submit_close(conn_id);
@@ -446,7 +454,7 @@ void IoUringLoop::submit_write(uint64_t conn_id, std::vector<uint8_t> data, bool
     }
 }
 
-void IoUringLoop::submit_close(uint64_t conn_id) {
+void Async::IoUringLoop::submit_close(uint64_t conn_id) {
     auto bit = buffers_.find(conn_id);
     if (bit == buffers_.end()) {
         return;
@@ -454,7 +462,7 @@ void IoUringLoop::submit_close(uint64_t conn_id) {
 
     if (!bit->second.closing) {
         logger.debug(
-            "[submit_close] conn=" + std::to_string(conn_id) 
+            "[submit_close] conn=" + std::to_string(conn_id)
             + " inflight=" + std::to_string(bit->second.inflight)
             + " write_queue=" + std::to_string(bit->second.write_queue.size())
             + " write_pending=" + std::to_string(bit->second.write_pending)
@@ -462,7 +470,7 @@ void IoUringLoop::submit_close(uint64_t conn_id) {
 
         bit->second.closing = true;
     }
-    
+
     if (bit->second.inflight > 0) {
         return; // wait for the queue to drain
     }
@@ -475,7 +483,7 @@ void IoUringLoop::submit_close(uint64_t conn_id) {
     logger.debug("[CLOSE] conn=" + std::to_string(conn_id) + " closed");
 }
 
-void IoUringLoop::upgrade_tls(uint64_t conn_id) {
+void Async::IoUringLoop::upgrade_tls(uint64_t conn_id) {
     if (!tls_ctx_) {
         logger.error("[TLS] upgrade_tls() called but no TLS context available");
 
@@ -487,8 +495,8 @@ void IoUringLoop::upgrade_tls(uint64_t conn_id) {
     if (sit == sessions_.end()) {
         return;
     }
-    
-    auto tls = std::make_unique<TlsConn>(
+
+    auto tls = std::make_unique<TLS::Connection>(
         tls_ctx_->new_server_ssl(),
         [this, conn_id](std::span<const uint8_t> plain) {
             auto itr = sessions_.find(conn_id);
@@ -503,15 +511,15 @@ void IoUringLoop::upgrade_tls(uint64_t conn_id) {
     tls_conns_[conn_id] = std::move(tls);
 }
 
-io_uring_sqe* IoUringLoop::get_sqe() {
+io_uring_sqe* Async::IoUringLoop::get_sqe() {
     io_uring_sqe* sqe = io_uring_get_sqe(&ring_);
 
     if (!sqe) {
         // SQ is full, we submit and try again
         io_uring_submit(&ring_);
         sqe = io_uring_get_sqe(&ring_);
-        
-        if(!sqe) {
+
+        if (!sqe) {
             logger.error("[FATAL] [IO_URING] io_uring SQ overflow - increase depth of the queue");
             throw std::runtime_error("io_uring SQ Overflow - increase depth of the queue");
         }
@@ -520,6 +528,6 @@ io_uring_sqe* IoUringLoop::get_sqe() {
     return sqe;
 }
 
-void IoUringLoop::submit() {
+void Async::IoUringLoop::submit() {
     io_uring_submit(&ring_);
 }

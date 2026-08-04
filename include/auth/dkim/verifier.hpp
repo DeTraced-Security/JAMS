@@ -1,5 +1,8 @@
 #pragma once
 
+#include "dns/resolver.hpp"
+#include "dns/types.hpp"
+
 #include <functional>
 #include <memory>
 #include <optional>
@@ -7,8 +10,6 @@
 #include <unordered_map>
 #include <vector>
 #include <openssl/evp.h>
-#include "dns/resolver.hpp"
-#include "dns/types.hpp"
 
 namespace DKIM {
     enum class Result {
@@ -91,10 +92,10 @@ namespace DKIM {
     //   to avoid redundant DNS lookups when multiple signatures share a key.
     //
     // Threading: single-threaded; all calls from the io_uring event loop thread.
-    class DKIMVerifier {
+    class Verifier {
         public:
             /// @param resolver 
-            explicit DKIMVerifier(DNS::DNSResolver& resolver);
+            explicit Verifier(DNS::Resolver& resolver);
 
 
             /// @brief Verify DKIM signatures
@@ -199,7 +200,7 @@ namespace DKIM {
             /// @param explanation 
             void finish(std::shared_ptr<VerifyState> state, Result result, std::string explanation = {});
 
-            DNS::DNSResolver& resolver_;
+            DNS::Resolver& resolver_;
 
             /// @brief DKIM Key cache
             std::unordered_map<std::string, KeyRecord> key_cache_;
