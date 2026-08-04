@@ -14,21 +14,23 @@
 #include <sstream>
 #include <filesystem>
 
+using namespace SMTP;
+
 SubmissionServer::SubmissionServer(
     uint64_t conn_id, const std::string& remote_ip,
-    IoUringLoop& loop, Auth::CredentialStore& store,
-    Aliases& aliases
+    Async::IoUringLoop& loop, Auth::CredentialStore& store,
+    Auth::Aliases& aliases
 ) : dkim_signer_({
         .domain = get_hostname(),
         .selector = "jams",
         .priv_key_path = "/etc/jams/tls/key.pem"
     }), conn_id_(conn_id), remote_ip_(remote_ip), loop_(loop), sasl_(store), aliases_(aliases) {
-        reply(220, get_hostname() + " ESMTP submission");
+    reply(220, get_hostname() + " ESMTP submission");
 }
 
-void SubmissionServer::on_tls_established() {    
+void SubmissionServer::on_tls_established() {
     tls_active_ = true;
-    
+
     // No banner needed here, EHLO is received after the handshake
     logger.info("[SUBMISSION]: " + std::to_string(conn_id_) + " TLS handshake completed");
 }
@@ -47,7 +49,7 @@ void SubmissionServer::on_data(std::span<const uint8_t> bytes) {
 
             if (data_tail_ == "\r\n.\r\n") {
                 env_.body = line_buf_.substr(
-                    0, line_buf_.size() -5
+                    0, line_buf_.size() - 5
                 ); // remove the "\r\n.\r\n"
                 line_buf_.clear();
                 data_tail_.clear();
@@ -56,11 +58,13 @@ void SubmissionServer::on_data(std::span<const uint8_t> bytes) {
                     reply(250, "OK: Message Accepted");
                     state_ = State::Greeted;
                     env_ = {};
-                } else {
+                }
+                else {
                     reply(452, "Insufficient Storage");
                 }
             }
-        } else {
+        }
+        else {
             // Command mode: buffer until LF
             if (b == '\n') {
                 // Strip until CR isn't present
@@ -71,12 +75,13 @@ void SubmissionServer::on_data(std::span<const uint8_t> bytes) {
                 process_line(line_buf_);
                 line_buf_.clear();
 
-                
+
                 if (tls_upgrade_pending_) {
                     tls_upgrade_pending_ = false;
                     return;
                 }
-            } else {
+            }
+            else {
                 line_buf_ += static_cast<char>(b);
                 // Guard against long lines (RFC-5321 4.5.3)
                 if (line_buf_.size() > 2048) {
@@ -92,7 +97,7 @@ auto SubmissionServer::extract_address(const std::string& body, const std::strin
     std::vector<std::string> addresses = {};
     std::istringstream ss(body);
     std::string line{};
-    bool in_header{false};
+    bool in_header{ false };
 
     while (std::getline(ss, line)) {
         if (line.empty() && line.back() == '\r') {
@@ -109,9 +114,11 @@ auto SubmissionServer::extract_address(const std::string& body, const std::strin
         if (lower.substr(0, header_name.size() + 1) == header_name + ":") {
             in_header = true;
             line = line.substr(header_name.size() + 1);
-        } else if (in_header && (line[0] == ' ' || line[0] == '\t')) {
+        }
+        else if (in_header && (line[0] == ' ' || line[0] == '\t')) {
             // folded header continuation
-        } else {
+        }
+        else {
             in_header = false;
             continue;
         }
@@ -150,10 +157,10 @@ auto SubmissionServer::strip_header(const std::string& body, const std::string& 
     std::string result{};
     std::istringstream ss(body);
     std::string line{};
-    bool skipping{false};
+    bool skipping{ false };
 
     while (std::getline(ss, line)) {
-        std::string stripped{line};
+        std::string stripped{ line };
 
         if (!stripped.empty() && stripped.back() == '\r') {
             stripped.pop_back();
@@ -166,7 +173,7 @@ auto SubmissionServer::strip_header(const std::string& body, const std::string& 
             continue;
         }
 
-        std::string lower{stripped};
+        std::string lower{ stripped };
         std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
 
         if (lower.substr(0, header_name.size() + 1) == header_name + ":") {
@@ -190,7 +197,7 @@ void SubmissionServer::process_line(std::string_view line) {
     if (sasl_.in_progress()) {
         // "*" Cancels the exchange
         auto resp = sasl_.respond(std::string(line));
-        reply (resp.code, resp.message);
+        reply(resp.code, resp.message);
 
         if (resp.code == 235) {
             state_ = State::Authenticated;
@@ -212,30 +219,40 @@ void SubmissionServer::process_line(std::string_view line) {
     for (char& c : verb) {
         c = static_cast<char>(std::toupper(c));
     }
-    
+
     logger.debug("[SUBMISSION]: " + std::to_string(conn_id_) + std::string(line));
 
     if (verb == "EHLO") {
         cmd_ehlo(arg);
-    } else if (verb == "HELO") {
+    }
+    else if (verb == "HELO") {
         cmd_helo(arg);
-    } else if (verb == "MAIL") {
+    }
+    else if (verb == "MAIL") {
         cmd_mail(arg);
-    } else if (verb == "RCPT") {
+    }
+    else if (verb == "RCPT") {
         cmd_rcpt(arg);
-    } else if (verb == "DATA") {
+    }
+    else if (verb == "DATA") {
         cmd_data();
-    } else if (verb == "RSET") {
+    }
+    else if (verb == "RSET") {
         cmd_rset();
-    } else if (verb == "NOOP") {
+    }
+    else if (verb == "NOOP") {
         cmd_noop();
-    } else if (verb == "QUIT") {
+    }
+    else if (verb == "QUIT") {
         cmd_quit();
-    } else if (verb == "VRFY" || verb == "EXPN") {
+    }
+    else if (verb == "VRFY" || verb == "EXPN") {
         reply(502, "Command not implemented");
-    } else if (verb == "AUTH") {
+    }
+    else if (verb == "AUTH") {
         cmd_auth(arg);
-    } else if (verb == "STARTTLS") {
+    }
+    else if (verb == "STARTTLS") {
         cmd_starttls();
     }
     else {
@@ -257,9 +274,10 @@ void SubmissionServer::cmd_ehlo(std::string_view arg) {
 
     if (loop_.is_tls_active(conn_id_)) {
         caps.push_back("AUTH PLAIN LOGIN");
-    } else {
+    }
+    else {
         /// Note: kept for Outlook compat.
-        caps.push_back("STARTTLS"); 
+        caps.push_back("STARTTLS");
         // We reject AUTH without TLS, so no need to guard here
         caps.push_back("AUTH PLAIN LOGIN");
     }
@@ -300,14 +318,15 @@ void SubmissionServer::cmd_auth(std::string_view arg) {
 
     auto sp = arg.find(' ');
     std::string mechanism(arg.substr(0, sp));
-    std::string initial = (sp != std::string_view::npos) ? std::string(arg.substr(sp+1)) : "";
+    std::string initial = (sp != std::string_view::npos) ? std::string(arg.substr(sp + 1)) : "";
 
     auto resp = sasl_.begin(mechanism, initial);
     reply(resp.code, resp.message);
 
     if (resp.code == 235) {
         state_ = State::Authenticated;
-    } else if (resp.code == 334) {
+    }
+    else if (resp.code == 334) {
         // Challenge has been sent, we wait on greeted until it's complete
         state_ = State::Greeted;
     }
@@ -324,7 +343,8 @@ void SubmissionServer::cmd_mail(std::string_view arg) {
     if (state_ != State::Authenticated) {
         if (state_ == State::Greeted) {
             reply(530, "5.7.0 Authentication Required");
-        } else {
+        }
+        else {
             reply(503, "Bad sequence of commands");
         }
 
@@ -357,7 +377,7 @@ void SubmissionServer::cmd_rcpt(std::string_view arg) {
         c = static_cast<char>(std::toupper(c));
     }
 
-    if (upper.substr(0,3) != "TO:") {
+    if (upper.substr(0, 3) != "TO:") {
         reply(501, "Syntax: RCPT TO:<addr>");
         return;
     }
@@ -369,7 +389,7 @@ void SubmissionServer::cmd_rcpt(std::string_view arg) {
         return;
     }
 
-    
+
     // RFC 5321 4.5.3: max 100
     if (env_.rcpt_to.size() >= 100) {
         reply(452, "Too Many Recipients");
@@ -381,7 +401,7 @@ void SubmissionServer::cmd_rcpt(std::string_view arg) {
 
     std::transform(domain.begin(), domain.end(), domain.begin(), ::tolower);
 
-    if (!MailDir::is_safe(domain)) {
+    if (!Storage::MailDir::is_safe(domain)) {
         reply(550, "Mailbox unavailable");
         return;
     }
@@ -399,7 +419,7 @@ void SubmissionServer::cmd_rcpt(std::string_view arg) {
             return;
         }
 
-        std::string sender_domain = Aliases::extract_domain(env_.mail_from);
+        std::string sender_domain = Auth::Aliases::extract_domain(env_.mail_from);
         if (!aliases_.is_domain_allowed(addr, sender_domain)) {
             logger.info("[SUBMISSION] Rejected " + env_.mail_from + " -> " + addr + " (sender domain not allowed)");
             reply(550, "Mailbox unavailable");
@@ -453,7 +473,7 @@ bool SubmissionServer::deliver() {
             auto at = addr.find('@');
             if (at == std::string::npos) {
                 continue;
-            } 
+            }
 
             std::string domain = addr.substr(at + 1);
             std::transform(domain.begin(), domain.end(), domain.begin(), ::tolower);
@@ -476,12 +496,12 @@ bool SubmissionServer::deliver() {
         std::string domain = (at != std::string::npos) ? rcpt.substr(at + 1) : "";
         std::string local = (at != std::string::npos) ? rcpt.substr(0, at) : rcpt;
 
-        if (!MailDir::is_safe(local)) {
+        if (!Storage::MailDir::is_safe(local)) {
             logger.warn("[DELIVER] Rejected unsafe local part");
             all_ok = false;
-            
+
             continue;
-        } 
+        }
 
         if (domain.empty() || domain == get_hostname()) {
 
@@ -493,7 +513,7 @@ bool SubmissionServer::deliver() {
                 mailbox_user = mailbox_user.substr(0, tat);
             }
 
-            if (!MailDir::is_safe(mailbox_user)) {
+            if (!Storage::MailDir::is_safe(mailbox_user)) {
                 logger.warn("[DELIVER] Rejected unsafe local part");
                 all_ok = false;
 
@@ -514,7 +534,7 @@ bool SubmissionServer::deliver() {
                 continue;
             }
 
-            MailDir mdir(get_mailroot() + mailbox_user);
+            Storage::MailDir mdir(get_mailroot() + mailbox_user);
             auto stored_path = mdir.deliver(env_.mail_from, rcpt, env_.body);
 
             if (!stored_path) {
@@ -525,7 +545,8 @@ bool SubmissionServer::deliver() {
             if (target != rcpt) {
                 aliases_.schedule_purge(rcpt, mailbox_user, *stored_path);
             }
-        } else {
+        }
+        else {
             if (!relay_outbound(env_.mail_from, rcpt, domain, env_.body)) {
                 logger.error("[DELIVER] Relay failed for: " + rcpt);
                 all_ok = false;
@@ -563,7 +584,7 @@ bool SubmissionServer::relay_outbound(
             }
             ptr += *ptr + 1;
         }
-        
+
         if (ptr < end && *ptr == 0) {
             ptr++;
         }
@@ -633,7 +654,7 @@ bool SubmissionServer::relay_outbound(
 
     logger.debug("[RELAY] MX For: " + domain + " -> " + mx_host + " (prio=" + std::to_string(mx_prio) + ")");
 
-    struct addrinfo hints{}, *res = nullptr;
+    struct addrinfo hints {}, * res = nullptr;
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
 
@@ -649,7 +670,7 @@ bool SubmissionServer::relay_outbound(
     }
 
     // 30 second timeout
-    struct timeval tv{ .tv_sec = 30, .tv_usec = 0 };
+    struct timeval tv { .tv_sec = 30, .tv_usec = 0 };
     setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
     setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
 
@@ -674,17 +695,17 @@ bool SubmissionServer::relay_outbound(
                 break;
             }
         }
-        
+
         logger.debug("[RELAY] " + line);
         return line;
-    };
+        };
 
     auto send_line = [&](const std::string& line) {
         logger.debug("[RELAY] " + line);
 
         std::string out = line + "\r\n";
         ::send(sock, out.c_str(), out.size(), 0);
-    };
+        };
 
     auto expect = [&](int code) -> bool {
         // read until non-continuatin
@@ -700,7 +721,7 @@ bool SubmissionServer::relay_outbound(
         }
 
         return last.size() >= 3 && std::stoi(last.substr(0, 3)) == code;
-    };
+        };
 
     bool ok = true;
 
@@ -747,12 +768,14 @@ bool SubmissionServer::relay_outbound(
         if (sep != std::string::npos) {
             msg_headers = body.substr(0, sep + 2);
             msg_body = body.substr(sep + 4);
-        } else {
+        }
+        else {
             sep = body.find("\n\n");
             if (sep != std::string::npos) {
                 msg_headers = body.substr(0, sep + 1);
                 msg_body = body.substr(sep + 2);
-            } else {
+            }
+            else {
                 msg_headers = body;
                 msg_body = "";
             }
@@ -760,7 +783,8 @@ bool SubmissionServer::relay_outbound(
 
         try {
             outbound = dkim_signer_.sign(msg_headers, msg_body);
-        } catch (const std::exception& e) {
+        }
+        catch (const std::exception& e) {
             logger.error("[OUTBOUND_RELAY] DKIM Signing failed: " + std::string(e.what()));
             ok = false;
         }
@@ -797,14 +821,14 @@ bool SubmissionServer::relay_outbound(
 void SubmissionServer::reply(int code, std::string_view text) {
     std::string line(std::to_string(code) + " " + std::string(text));
     line += "\r\n";
-    
+
     logger.debug("[SUBMISSION] " + std::to_string(conn_id_) + " > " + std::string(text));
 
     std::vector<uint8_t> buf(line.begin(), line.end());
     loop_.submit_write(conn_id_, std::move(buf));
 }
 
-void SubmissionServer::reply_multiline(int code, const std::vector<std::string> &lines) {
+void SubmissionServer::reply_multiline(int code, const std::vector<std::string>& lines) {
     // RFC 5321 4.2.1 Intermediate lines use "<code>-"
     std::string code_str = std::to_string(code);
     std::string out;
@@ -825,7 +849,7 @@ void SubmissionServer::reply_multiline(int code, const std::vector<std::string> 
 
 std::string_view SubmissionServer::trim(std::string_view sv) {
     auto start = sv.find_first_not_of(" \t\r\n");
-    
+
     if (start == std::string_view::npos) {
         return{};
     }

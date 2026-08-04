@@ -3,9 +3,11 @@
 #include <iostream>
 #include <filesystem>
 
+using namespace Utils;
+
 Logger::Logger(const std::string& filepath) {
     const std::filesystem::path absolute_path = std::filesystem::weakly_canonical(filepath);
-    
+
     std::error_code ec;
     std::filesystem::create_directories(absolute_path.parent_path(), ec);
 
@@ -38,16 +40,16 @@ void Logger::log(LogLevel level, std::string msg) {
 
     // Copy to stdout for info and error
     switch (level) {
-        case LogLevel::Info: {
-            std::cout << "\033[34m" << msg.c_str() << "\033[0m" << std::endl;
-            break;
-        }
-        case LogLevel::Error: {
-            std::cerr << "\033[31m" << msg.c_str() << "\033[0m" << std::endl;
-        }
-        default: {
-            break;
-        }
+    case LogLevel::Info: {
+        std::cout << "\033[34m" << msg.c_str() << "\033[0m" << std::endl;
+        break;
+    }
+    case LogLevel::Error: {
+        std::cerr << "\033[31m" << msg.c_str() << "\033[0m" << std::endl;
+    }
+    default: {
+        break;
+    }
     }
 
     cv_.notify_one();
@@ -96,7 +98,7 @@ std::string Logger::format(LogLevel level, std::string msg) const {
         << '.' << std::setw(3) << std::setfill('0') << ms.count()
         << " [" << to_string(level) << "] "
         << msg << std::endl;
-    
+
     return oss.str();
 }
 
@@ -108,7 +110,7 @@ void Logger::run() {
             std::unique_lock<std::mutex> lock(mutex_);
             cv_.wait(lock, [this] {
                 return stopping_ || !queue_.empty();
-            });
+                });
 
             if (queue_.empty() && stopping_) {
                 break;
@@ -120,7 +122,7 @@ void Logger::run() {
         for (auto& line : local_batch) {
             file_ << line;
         }
-        
+
         file_.flush();
         local_batch.clear();
     }

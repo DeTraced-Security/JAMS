@@ -26,7 +26,7 @@ namespace IMAP {
         std::string filename;
         std::string flags; // IMAP Flags: \Seen, \Answered, \Flagged, \Deleted
         size_t size; // blob size in bytes
-        bool in_cur{false};
+        bool in_cur{ false };
     };
 
 
@@ -53,165 +53,165 @@ namespace IMAP {
     //   Selected         -> Authenticated (after CLOSE)
     //   Any              -> Logout (after LOGOUT)
     class Session : public SessionFactory {
-        public:
-            Session(
-                uint64_t conn_id, std::string remote_ip, IoUringLoop& loop,
-                Auth::CredentialStore& cred_store, const std::string& mail_root
-            );
+    public:
+        Session(
+            uint64_t conn_id, std::string remote_ip, Async::IoUringLoop& loop,
+            Auth::CredentialStore& cred_store, const std::string& mail_root
+        );
 
-            /// @brief Called by io_uring whenever bytes arrive
-            /// @param bytes 
-            void on_data(std::span<const uint8_t> bytes);
+        /// @brief Called by io_uring whenever bytes arrive
+        /// @param bytes 
+        void on_data(std::span<const uint8_t> bytes);
 
-            bool wants_close() const override {
-                return state_ == State::Logout;  
-            }
+        bool wants_close() const override {
+            return state_ == State::Logout;
+        }
 
-        private:
-            void process_line(const std::string& line);
+    private:
+        void process_line(const std::string& line);
 
-            void cmd_capability(const std::string& tag);
+        void cmd_capability(const std::string& tag);
 
-            void cmd_noop(const std::string& tag);
+        void cmd_noop(const std::string& tag);
 
-            void cmd_logout(const std::string& tag);
+        void cmd_logout(const std::string& tag);
 
-            void cmd_starttls(const std::string& tag);
+        void cmd_starttls(const std::string& tag);
 
-            void cmd_login(const std::string& tag, const std::string& args);
+        void cmd_login(const std::string& tag, const std::string& args);
 
-            void cmd_auth(const std::string& tag, const std::string& args);
+        void cmd_auth(const std::string& tag, const std::string& args);
 
-            void cmd_append(const std::string& tag, const std::string& args);
+        void cmd_append(const std::string& tag, const std::string& args);
 
-            void cmd_create(const std::string& tag, const std::string& args);
+        void cmd_create(const std::string& tag, const std::string& args);
 
-            void complete_append();
+        void complete_append();
 
 
-            void complete_plain_auth(const std::string& tag, const std::string& b64);
-            
-            void cmd_select(
-                const std::string& tag, const std::string& mailbox,
-                bool read_only
-            );
+        void complete_plain_auth(const std::string& tag, const std::string& b64);
 
-            void cmd_list(const std::string& tag, const std::string& args);
-            
-            void cmd_lsub(const std::string& tag, const std::string& args);
-            
-            void cmd_status(const std::string& tag, const std::string& args);
-            
-            void cmd_fetch(const std::string& tag, const std::string& args);
-            
-            void cmd_store(const std::string& tag, const std::string& args);
-            
-            void cmd_expunge(const std::string& tag);
-            
-            void cmd_check(const std::string& tag);
-            
-            void cmd_close(const std::string& tag);
+        void cmd_select(
+            const std::string& tag, const std::string& mailbox,
+            bool read_only
+        );
 
-            void cmd_uid_search(const std::string& tag, const std::string& args);
+        void cmd_list(const std::string& tag, const std::string& args);
 
-            void ensure_mailbox_dirs(const std::string& mailbox);
+        void cmd_lsub(const std::string& tag, const std::string& args);
 
-            void ensure_standard_folders();
+        void cmd_status(const std::string& tag, const std::string& args);
 
-            std::vector<uint32_t> parse_sequence_set(const std::string& set) const;
+        void cmd_fetch(const std::string& tag, const std::string& args);
 
-            /// @brief Fetches the given message from the maildir
-            /// @param msg 
-            /// @param items 
-            /// @return 
-            std::string fetch_message(const MessageMeta& msg, const std::string& items) const;
+        void cmd_store(const std::string& tag, const std::string& args);
 
-            /// @brief Reads the encrypted blobs and returns their value
-            /// @param msg 
-            /// @return 
-            std::vector<uint8_t> read_blob(const MessageMeta& msg) const;
+        void cmd_expunge(const std::string& tag);
 
-            /// @brief Build a synthetic envelope with NILs as the actual headers are encrypted
-            /// @param msg 
-            /// @return 
-            std::string build_envelope(const MessageMeta& msg) const;
+        void cmd_check(const std::string& tag);
 
-            /// @brief Builds the body structure for an encrypted octet stream
-            /// @param msg 
-            /// @return 
-            std::string build_body(const MessageMeta& msg) const;
+        void cmd_close(const std::string& tag);
 
-            /// @brief Loads all messages from the selected mailbox
-            /// @param mailbox 
-            void load_mailbox(const std::string& mailbox);
+        void cmd_uid_search(const std::string& tag, const std::string& args);
 
-            /// @brief Scans the new/ directory for any messages that may have arrived
-            /// @return 
-            size_t scan_new() const;
+        void ensure_mailbox_dirs(const std::string& mailbox);
 
-            /// @brief Moves new/ messages to cur/ to mark that it's been seen by the server
-            void incorporate_new();
+        void ensure_standard_folders();
 
-            /// @brief Derives the UUID from the maildir filename, specifically the timestamp
-            /// @param filename 
-            /// @return 
-            static uint32_t uuid_from_file(const std::string& filename);
+        std::vector<uint32_t> parse_sequence_set(const std::string& set) const;
 
-            /// @brief Parses the flags from the filename suffix: ":2,<flags>"
-            /// @param filename 
-            /// @return 
-            static std::string flags_from_file(const std::string& filename);
+        /// @brief Fetches the given message from the maildir
+        /// @param msg 
+        /// @param items 
+        /// @return 
+        std::string fetch_message(const MessageMeta& msg, const std::string& items) const;
 
-            /// @brief Send back a response to the client
-            /// @param line 
-            void send(const std::string& line);
+        /// @brief Reads the encrypted blobs and returns their value
+        /// @param msg 
+        /// @return 
+        std::vector<uint8_t> read_blob(const MessageMeta& msg) const;
 
-            /// @brief Send back an OK response to the client
-            /// @param tag 
-            /// @param msg 
-            void ok(const std::string& tag, const std::string& msg);
+        /// @brief Build a synthetic envelope with NILs as the actual headers are encrypted
+        /// @param msg 
+        /// @return 
+        std::string build_envelope(const MessageMeta& msg) const;
 
-            /// @brief Send back a NO response to the client
-            /// @param tag 
-            /// @param msg 
-            void no(const std::string& tag, const std::string& msg);
+        /// @brief Builds the body structure for an encrypted octet stream
+        /// @param msg 
+        /// @return 
+        std::string build_body(const MessageMeta& msg) const;
 
-            /// @brief Send back a BAD response to the client
-            /// @param tag 
-            /// @param msg 
-            void bad(const std::string& tag, const std::string& msg);
+        /// @brief Loads all messages from the selected mailbox
+        /// @param mailbox 
+        void load_mailbox(const std::string& mailbox);
 
-            /// @brief Send back an untagged ("*") response to the client
-            /// @param data 
-            void untagged(const std::string& data);
+        /// @brief Scans the new/ directory for any messages that may have arrived
+        /// @return 
+        size_t scan_new() const;
 
-            /// @brief "JAMS" in hexadecimal
-            static constexpr uint32_t IMAP_UUID_VALIDITY = 0x4A414D53; 
+        /// @brief Moves new/ messages to cur/ to mark that it's been seen by the server
+        void incorporate_new();
 
-            uint64_t conn_id_;
-            std::string remote_ip_;
-            IoUringLoop& loop_;
-            Auth::CredentialStore& cred_store_;
-            std::string mail_root_; // i.e. /var/mail/vhosts
+        /// @brief Derives the UUID from the maildir filename, specifically the timestamp
+        /// @param filename 
+        /// @return 
+        static uint32_t uuid_from_file(const std::string& filename);
 
-            State state_{State::NotAuthenticated};
-            std::string line_buf_;
-            std::string username_;
-            std::string selected_mailbox_;
-            bool read_only_{false};
-            bool auth_pending_{false};
-            std::string auth_tag_;
+        /// @brief Parses the flags from the filename suffix: ":2,<flags>"
+        /// @param filename 
+        /// @return 
+        static std::string flags_from_file(const std::string& filename);
 
-            // APPEND ingestion state
-            bool literal_pending_{false};
-            size_t literal_remaining_{0};
-            std::vector<uint8_t> literal_buf_;
-            std::string append_tag_;
-            std::string append_mailbox_;
-            std::string append_flags_;
-            static std::atomic<uint32_t> append_seq_;
+        /// @brief Send back a response to the client
+        /// @param line 
+        void send(const std::string& line);
 
-            std::vector<MessageMeta> messages_;
-            uint32_t next_uuid_{1}; // The next UUID to assign
+        /// @brief Send back an OK response to the client
+        /// @param tag 
+        /// @param msg 
+        void ok(const std::string& tag, const std::string& msg);
+
+        /// @brief Send back a NO response to the client
+        /// @param tag 
+        /// @param msg 
+        void no(const std::string& tag, const std::string& msg);
+
+        /// @brief Send back a BAD response to the client
+        /// @param tag 
+        /// @param msg 
+        void bad(const std::string& tag, const std::string& msg);
+
+        /// @brief Send back an untagged ("*") response to the client
+        /// @param data 
+        void untagged(const std::string& data);
+
+        /// @brief "JAMS" in hexadecimal
+        static constexpr uint32_t IMAP_UUID_VALIDITY = 0x4A414D53;
+
+        uint64_t conn_id_;
+        std::string remote_ip_;
+        Async::IoUringLoop& loop_;
+        Auth::CredentialStore& cred_store_;
+        std::string mail_root_; // i.e. /var/mail/vhosts
+
+        State state_{ State::NotAuthenticated };
+        std::string line_buf_;
+        std::string username_;
+        std::string selected_mailbox_;
+        bool read_only_{ false };
+        bool auth_pending_{ false };
+        std::string auth_tag_;
+
+        // APPEND ingestion state
+        bool literal_pending_{ false };
+        size_t literal_remaining_{ 0 };
+        std::vector<uint8_t> literal_buf_;
+        std::string append_tag_;
+        std::string append_mailbox_;
+        std::string append_flags_;
+        static std::atomic<uint32_t> append_seq_;
+
+        std::vector<MessageMeta> messages_;
+        uint32_t next_uuid_{ 1 }; // The next UUID to assign
     };
 };

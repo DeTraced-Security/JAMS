@@ -59,26 +59,26 @@ namespace DNS {
     struct Question {
         std::string name;
         RRType qtype;
-        RRClass qclass{RRClass::IN};
+        RRClass qclass{ RRClass::IN };
     };
 
     // Flags Field (RFC 1035 4.1.1)
     struct Flags {
-        bool qr{false}; // 0=query, 1=response
-        uint8_t opcode{0}; // 0=QUERY
-        bool aa{false}; // authoritive answer
-        bool tc{false}; // truncated TCP fallback
-        bool rd{true}; // recursion desired
-        bool ra{false}; // recursion available
-        uint8_t rcode{0}; // 0=NOERROR, 1=FORMERR, 2=SERVFAIL, 3=NXDOMAIN
+        bool qr{ false }; // 0=query, 1=response
+        uint8_t opcode{ 0 }; // 0=QUERY
+        bool aa{ false }; // authoritive answer
+        bool tc{ false }; // truncated TCP fallback
+        bool rd{ true }; // recursion desired
+        bool ra{ false }; // recursion available
+        uint8_t rcode{ 0 }; // 0=NOERROR, 1=FORMERR, 2=SERVFAIL, 3=NXDOMAIN
 
         static constexpr uint8_t RCODE_NOERROR = 0;
         static constexpr uint8_t RCODE_NXDOMAIN = 3;
         static constexpr uint8_t RCODE_SERVFAIL = 2;
     };
 
-    struct Message {
-        uint16_t id{0};
+    struct MessageHeader {
+        uint16_t id{ 0 };
         Flags flags{};
         std::vector<Question> questions;
         std::vector<ResourceRecord> answers;
@@ -96,7 +96,7 @@ namespace DNS {
     };
 
     struct ResolveResult {
-        ResolveStatus status{ResolveStatus::OK};
+        ResolveStatus status{ ResolveStatus::OK };
         std::vector<ResourceRecord> records;
     };
 };
