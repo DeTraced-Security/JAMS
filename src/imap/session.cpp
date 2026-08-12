@@ -457,6 +457,8 @@ void Session::complete_append() {
         base += "/." + append_mailbox_;
     }
 
+    ensure_mailbox_dirs(base);
+
     std::string path = base + "/cur/" + fname;
     std::ofstream out(path, std::ios::binary);
 
