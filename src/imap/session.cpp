@@ -93,7 +93,9 @@ void Session::process_line(const std::string& line) {
         return;
     }
 
-    logger.info("[IMAP] " + std::to_string(conn_id_) + " " + line);
+    if (line.find_first_of("LOGIN \"") == 0) { /// Ignore credentials 
+        logger.debug("[IMAP] " + std::to_string(conn_id_) + " " + line);
+    }
 
     std::istringstream ss(line);
     std::string tag, command;

@@ -18,6 +18,15 @@ bool MailDir::ensure_dirs() {
     namespace fs = std::filesystem;
 
     std::error_code ec;
+    for (const char* sub : { ".Sent", ".Trash" }) {
+        fs::create_directories(base_ / sub, ec);
+        if (ec) {
+            logger.debug("[MAILDIR] create_directories(" + std::string((base_ / sub)) + "): " + ec.message());
+
+            return false;
+        }
+    }
+
     for (const char* sub : { "tmp", "new", "cur" }) {
         fs::create_directories(base_ / sub, ec);
         if (ec) {
@@ -87,7 +96,7 @@ std::optional<std::string> MailDir::deliver(
     std::filesystem::rename(tmp_path, new_path, ec);
 
     if (ec) {
-        logger.error("[MAILDIR] Rename to new/ faield: " + ec.message());
+        logger.error("[MAILDIR] Rename to new/ failed: " + ec.message());
 
         std::filesystem::remove(tmp_path, ec);
         return "";
