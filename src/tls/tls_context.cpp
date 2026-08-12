@@ -1,4 +1,5 @@
 #include "tls/tls_context.hpp"
+#include "globals.hpp"
 
 #include <openssl/ssl.h>
 #include <openssl/err.h>
@@ -12,7 +13,7 @@ static std::string ssl_error_string()
     return buf;
 }
 
-TLS::Context::Context(const std::string &cert, const std::string &key)
+TLS::Context::Context(const std::string& cert, const std::string& key)
 {
     // One-time init
     SSL_library_init();
@@ -34,12 +35,12 @@ TLS::Context::Context(const std::string &cert, const std::string &key)
         ctx_, SSL_OP_CIPHER_SERVER_PREFERENCE | SSL_OP_NO_COMPRESSION);
 
     SSL_CTX_set_cipher_list(ctx_,
-                            "ECDHE-ECDSA-AES256-GCM-SHA384:"
-                            "ECDHE-RSA-AES256-GCM-SHA384:"
-                            "ECDHE-ECDSA-CHACHA20-POLY1305:"
-                            "ECDHE-RSA-CHACHA20-POLY1305:"
-                            "ECDHE-ECDSA-AES128-GCM-SHA256:"
-                            "ECDHE-RSA-AES128-GCM-SHA256");
+        "ECDHE-ECDSA-AES256-GCM-SHA384:"
+        "ECDHE-RSA-AES256-GCM-SHA384:"
+        "ECDHE-ECDSA-CHACHA20-POLY1305:"
+        "ECDHE-RSA-CHACHA20-POLY1305:"
+        "ECDHE-ECDSA-AES128-GCM-SHA256:"
+        "ECDHE-RSA-AES128-GCM-SHA256");
 
     if (SSL_CTX_use_certificate_chain_file(ctx_, cert.c_str()) != 1)
     {
@@ -65,9 +66,9 @@ TLS::Context::~Context()
     }
 }
 
-SSL *TLS::Context::new_server_ssl() const
+SSL* TLS::Context::new_server_ssl() const
 {
-    SSL *ssl = SSL_new(ctx_);
+    SSL* ssl = SSL_new(ctx_);
 
     if (!ssl)
     {
