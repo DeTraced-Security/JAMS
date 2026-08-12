@@ -1,4 +1,5 @@
 #include "tls/tls_context.hpp"
+#include "globals.hpp"
 
 #include <openssl/ssl.h>
 #include <openssl/err.h>
@@ -12,7 +13,7 @@ static std::string ssl_error_string()
     return buf;
 }
 
-TLS::Context::Context(const std::string &cert, const std::string &key)
+TLS::Context::Context(const std::string& cert, const std::string& key)
 {
     // One-time init
     SSL_library_init();
@@ -34,12 +35,12 @@ TLS::Context::Context(const std::string &cert, const std::string &key)
         ctx_, SSL_OP_CIPHER_SERVER_PREFERENCE | SSL_OP_NO_COMPRESSION);
 
     SSL_CTX_set_cipher_list(ctx_,
-                            "ECDHE-ECDSA-AES256-GCM-SHA384:"
-                            "ECDHE-RSA-AES256-GCM-SHA384:"
-                            "ECDHE-ECDSA-CHACHA20-POLY1305:"
-                            "ECDHE-RSA-CHACHA20-POLY1305:"
-                            "ECDHE-ECDSA-AES128-GCM-SHA256:"
-                            "ECDHE-RSA-AES128-GCM-SHA256");
+        "ECDHE-ECDSA-AES256-GCM-SHA384:"
+        "ECDHE-RSA-AES256-GCM-SHA384:"
+        "ECDHE-ECDSA-CHACHA20-POLY1305:"
+        "ECDHE-RSA-CHACHA20-POLY1305:"
+        "ECDHE-ECDSA-AES128-GCM-SHA256:"
+        "ECDHE-RSA-AES128-GCM-SHA256");
 
     if (SSL_CTX_use_certificate_chain_file(ctx_, cert.c_str()) != 1)
     {
@@ -65,15 +66,45 @@ TLS::Context::~Context()
     }
 }
 
-SSL *TLS::Context::new_server_ssl() const
+SSL* TLS::Context::new_server_ssl() const
 {
-    SSL *ssl = SSL_new(ctx_);
+    SSL* ssl = SSL_new(ctx_);
 
     if (!ssl)
     {
         throw std::runtime_error("SSL_new failed: " + ssl_error_string());
     }
 
-    // TODO: attach memory BIOs instead of fid
+    /// This is just a sanity check, we verify our CA already before making the server
+    /// This just forces the CA hostname to match the server hostname.
+    if (SSL_set_tlsext_host_name(ssl, get_hostname().c_str()) != 1) {
+        throw std::runtime_error("[FATAL] [TLS] failed to set CA hostname" + ssl_error_string());
+    }
+
+    BIO* rbio = BIO_new(BIO_s_mem()); /// network BIO (input)
+    BIO* wbio = BIO_new(BIO_s_mem()); /// OpenSSL BIO (output)
+
+    if (!rbio || !wbio) {
+        if (rbio) {
+            BIO_free(rbio);
+        }
+
+        if (wbio) {
+            BIO_free(wbio);
+        }
+
+        SSL_free(ssl);
+        throw std::runtime_error("[FATAL] [TLS] BIO_new failed: " + ssl_error_string());
+    }
+
+    /// Returns 0/EOF when drained, "connection closed," so we feed it -1 (retry)
+    /// as we increment it
+    BIO_set_mem_eof_return(rbio, -1);
+    BIO_set_mem_eof_return(wbio, -1);
+
+
+    /// Hand over control to OpenSSL
+    SSL_set_bio(ssl, rbio, wbio);
+
     return ssl;
 }
