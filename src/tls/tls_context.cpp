@@ -75,6 +75,36 @@ SSL* TLS::Context::new_server_ssl() const
         throw std::runtime_error("SSL_new failed: " + ssl_error_string());
     }
 
-    // TODO: attach memory BIOs instead of fid
+    /// This is just a sanity check, we verify our CA already before making the server
+    /// This just forces the CA hostname to match the server hostname.
+    if (SSL_set_tlsext_host_name(ssl, get_hostname().c_str()) != 1) {
+        throw std::runtime_error("[FATAL] [TLS] failed to set CA hostname" + ssl_error_string());
+    }
+
+    BIO* rbio = BIO_new(BIO_s_mem()); /// network BIO (input)
+    BIO* wbio = BIO_new(BIO_s_mem()); /// OpenSSL BIO (output)
+
+    if (!rbio || !wbio) {
+        if (rbio) {
+            BIO_free(rbio);
+        }
+
+        if (wbio) {
+            BIO_free(wbio);
+        }
+
+        SSL_free(ssl);
+        throw std::runtime_error("[FATAL] [TLS] BIO_new failed: " + ssl_error_string());
+    }
+
+    /// Returns 0/EOF when drained, "connection closed," so we feed it -1 (retry)
+    /// as we increment it
+    BIO_set_mem_eof_return(rbio, -1);
+    BIO_set_mem_eof_return(wbio, -1);
+
+
+    /// Hand over control to OpenSSL
+    SSL_set_bio(ssl, rbio, wbio);
+
     return ssl;
 }
