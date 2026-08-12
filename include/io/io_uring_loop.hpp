@@ -54,6 +54,7 @@ inline uint64_t decode_conn_id(uint64_t userdata) {
 namespace SMTP { class Session; class SubmissionServer; struct ISession; };
 namespace TLS { class Context; class Connection; };
 namespace DNS { class Resolver; };
+namespace Auth { class CredentialStore; class Aliases; };
 
 /**
  * Design Notes:
@@ -64,12 +65,12 @@ namespace DNS { class Resolver; };
 namespace Async {
     class IoUringLoop {
     public:
-        using ISession = std::function<std::unique_ptr<SMTP::Session>(uint64_t, const std::string&, IoUringLoop&)>;
+        using SessionFactory = std::function<std::unique_ptr<SMTP::ISession>(uint64_t, const std::string&, IoUringLoop&)>;
 
         /// @brief Initialise io_uring with a queue depth of 256
         /// @param port 
         /// @param queue_depth 
-        explicit IoUringLoop(uint16_t port, ISession factory, unsigned queue_depth = 256);
+        explicit IoUringLoop(uint16_t port, SessionFactory factory, unsigned queue_depth = 256);
         ~IoUringLoop();
 
         IoUringLoop(const IoUringLoop&) = delete;
@@ -168,7 +169,7 @@ namespace Async {
             int fd{ -1 };
         };
 
-        ISession session_factory_;
+        SessionFactory session_factory_;
 
         uint64_t next_conn_id{ 1 };
         std::unordered_map<uint64_t, ConnBuffer> buffers_;
