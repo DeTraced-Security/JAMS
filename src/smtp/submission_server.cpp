@@ -652,6 +652,9 @@ bool SubmissionServer::relay_outbound(
         mx_host = domain;
     }
 
+    logger.info("[RELAY] envelope MAIL FROM = <" + from + ">");
+    logger.info("[RELAY] envelope RCPT TO   = <" + to + ">");
+
     logger.debug("[RELAY] MX For: " + domain + " -> " + mx_host + " (prio=" + std::to_string(mx_prio) + ")");
 
     struct addrinfo hints {}, * res = nullptr;
@@ -833,7 +836,9 @@ bool SubmissionServer::relay_outbound(
         }
 
         try {
+            logger.debug("[RELAY] Outbound headers:\n" + msg_headers);
             outbound = dkim_signer_.sign(msg_headers, msg_body);
+            logger.debug("[RELAY] Signed message:\n" + outbound);
         }
         catch (const std::exception& e) {
             logger.error("[OUTBOUND_RELAY] DKIM Signing failed: " + std::string(e.what()));
