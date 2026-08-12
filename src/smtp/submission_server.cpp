@@ -406,9 +406,9 @@ void SubmissionServer::cmd_rcpt(std::string_view arg) {
         return;
     }
 
-    if (domain != get_hostname()) {
-        reply(500, "5.7.1 Relaying denied");
-    }
+    // if (domain != get_hostname()) {
+    //     reply(500, "5.7.1 Relaying denied");
+    // }
 
     std::string resolved = aliases_.resolve(addr);
     bool is_alias = (resolved != addr);
