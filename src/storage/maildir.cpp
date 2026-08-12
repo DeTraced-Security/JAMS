@@ -45,6 +45,7 @@ std::optional<std::string> MailDir::deliver(
     const std::string& body
 ) {
     if (!ensure_dirs()) {
+        logger.error("[MAILDIR] Failed to ensure directories exist");
         return "";
     }
 
