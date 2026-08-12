@@ -490,6 +490,9 @@ void Session::ensure_mailbox_dirs(const std::string& mailbox) {
         base += "/." + mailbox;
     }
 
+    // Sanity check to ensure the base dir is real
+    ::mkdir(base.c_str(), 0700);
+
     for (const char* sub : { "cur", "new", "tmp" }) {
         std::string dir = base + "/" + sub;
         ::mkdir(dir.c_str(), 0700); // no-op if already exists
