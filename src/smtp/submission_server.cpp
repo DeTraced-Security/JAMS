@@ -700,27 +700,78 @@ bool SubmissionServer::relay_outbound(
         return line;
         };
 
+    auto send_all = [&](std::string_view data) -> bool {
+        size_t sent = 0;
+
+        while (sent < data.size()) {
+            ssize_t n = ::send(
+                sock, data.data() + sent,
+                data.size() - sent, 0
+            );
+
+            if (n <= 0) {
+                logger.error("[RELAY] send() failed: " + std::string(strerror(errno)));
+                return false;
+            }
+
+            sent += static_cast<size_t>(n);
+        }
+
+        return true;
+        };
+
     auto send_line = [&](const std::string& line) {
         logger.debug("[RELAY] " + line);
 
         std::string out = line + "\r\n";
-        ::send(sock, out.c_str(), out.size(), 0);
+        return send_all(line + "\r\n");
         };
 
-    auto expect = [&](int code) -> bool {
-        // read until non-continuatin
+    auto expect = [&](int expected) -> bool {
         std::string last;
+
         while (true) {
             last = recv_line();
+
+            if (last.empty()) {
+                logger.error("[RELAY] Connection closed/timeout waiting for SMTP response");
+                return false;
+            }
+
+            logger.debug("[RELAY] <-- " + last);
+
             if (last.size() >= 4 && last[3] == ' ') {
                 break;
             }
+
             if (last.size() < 4) {
-                break;
+                logger.error("[RELAY] Malformed SMTP response: " + last);
+                return false;
             }
         }
 
-        return last.size() >= 3 && std::stoi(last.substr(0, 3)) == code;
+        if (last.size() < 3) {
+            return false;
+        }
+
+        int actual = 0;
+        try {
+            actual = std::stoi(last.substr(0, 3));
+        }
+        catch (...) {
+            logger.error("[RELAY] Invalid SMTP response: " + last);
+            return false;
+        }
+
+        if (actual != expected) {
+            logger.error(
+                "[RELAY] Expected " + std::to_string(expected) +
+                ", got: " + last
+            );
+            return false;
+        }
+
+        return true;
         };
 
     bool ok = true;
