@@ -15,12 +15,12 @@
 #include <unordered_map>
 #include <vector>
 
-class Async::IoUringLoop;
+namespace Async { class IoUringLoop; };
 
 namespace DNS {
     using ResolveCallback = std::function<void(ResolveResult)>;
 
-    
+
     inline bool dns_is_completion(uint64_t ud) {
         return (ud >> 60) == 0xD;
     }
@@ -45,7 +45,7 @@ namespace DNS {
     };
 
     inline uint64_t dns_encode_userdata(DNSOp op, uint16_t txid) {
-        return (uint64_t{0xD} << 60) 
+        return (uint64_t{ 0xD } << 60)
             | (static_cast<uint64_t>(op) << 48)
             | txid;
     }
@@ -53,7 +53,7 @@ namespace DNS {
     inline DNSOp dns_decode_op(uint64_t ud) {
         return static_cast<DNSOp>(
             (ud >> 48) & 0xFFF
-        );
+            );
     }
 
     inline uint16_t dns_decode_txid(uint64_t ud) {
@@ -64,7 +64,7 @@ namespace DNS {
         std::string name;
         RRType type;
         ResolveCallback callback;
-        uint8_t retries{0};
+        uint8_t retries{ 0 };
         std::vector<uint8_t> wire;
     };
 
@@ -91,59 +91,59 @@ namespace DNS {
     //   TCP.
 
     class Resolver {
-        public:
-            Resolver(const std::string& nameserver, io_uring* ring);
-            ~Resolver();
+    public:
+        Resolver(const std::string& nameserver, io_uring* ring);
+        ~Resolver();
 
-            Resolver(const Resolver&) = delete;
-            Resolver& operator=(const Resolver&) = delete;
+        Resolver(const Resolver&) = delete;
+        Resolver& operator=(const Resolver&) = delete;
 
-            void resolve(const std::string& name, RRType type, ResolveCallback callback);
+        void resolve(const std::string& name, RRType type, ResolveCallback callback);
 
-            void on_cqe(uint64_t user_data, int res);
+        void on_cqe(uint64_t user_data, int res);
 
-            void resolve_txt(const std::string& name, ResolveCallback cb);
-            void resolve_mx(const std::string& name, ResolveCallback cb);
-            void resolve_a(const std::string& name, ResolveCallback cb);
+        void resolve_txt(const std::string& name, ResolveCallback cb);
+        void resolve_mx(const std::string& name, ResolveCallback cb);
+        void resolve_a(const std::string& name, ResolveCallback cb);
 
-        private:
-            void submit_query(uint16_t txid, PendingQuery& pq);
-            void arm_recv(uint16_t txid);
+    private:
+        void submit_query(uint16_t txid, PendingQuery& pq);
+        void arm_recv(uint16_t txid);
 
-            uint16_t alloc_txid(); // Random, collision-free
-            
-            void on_send(uint16_t txid, int res);
-            void on_recv(uint16_t txid, int res);
-            void on_timeout(uint16_t txid);
+        uint16_t alloc_txid(); // Random, collision-free
 
-            io_uring_sqe* get_sqe();
-            void submit();
+        void on_send(uint16_t txid, int res);
+        void on_recv(uint16_t txid, int res);
+        void on_timeout(uint16_t txid);
 
-            inline bool dns_is_dns_completion(uint64_t ud) {
-                return (ud >> 60) == 0xD;
-            }
+        io_uring_sqe* get_sqe();
+        void submit();
 
-            static constexpr uint64_t QUERY_TIMEOUT_NS = 5'000'000'000ULL; // 5 Seconds
-            static constexpr uint8_t MAX_RETRIES = 1;
-            static constexpr size_t RECV_BUF_SIZE = 4096;
+        inline bool dns_is_dns_completion(uint64_t ud) {
+            return (ud >> 60) == 0xD;
+        }
 
-            io_uring* ring_{nullptr};
-            int udp_fd_{-1};
-            sockaddr_in nameserver_addr_{};
+        static constexpr uint64_t QUERY_TIMEOUT_NS = 5'000'000'000ULL; // 5 Seconds
+        static constexpr uint8_t MAX_RETRIES = 1;
+        static constexpr size_t RECV_BUF_SIZE = 4096;
 
-            std::mt19937 rng_;
-            std::uniform_int_distribution<uint16_t> txid_dist_{1, 0xFFFF};
-            std::unordered_map<uint16_t, PendingQuery> pending_;
+        io_uring* ring_{ nullptr };
+        int udp_fd_{ -1 };
+        sockaddr_in nameserver_addr_{};
 
-            std::unordered_map<uint16_t, std::vector<uint8_t>> recv_buffs_;
+        std::mt19937 rng_;
+        std::uniform_int_distribution<uint16_t> txid_dist_{ 1, 0xFFFF };
+        std::unordered_map<uint16_t, PendingQuery> pending_;
 
-            struct RecvCtx {
-                std::vector<uint8_t> buf;
-                iovec iov{};
-                msghdr msg{};
-                sockaddr_in src_addr{};
-            };
+        std::unordered_map<uint16_t, std::vector<uint8_t>> recv_buffs_;
 
-            std::unordered_map<uint16_t, RecvCtx> recv_ctxs_;
+        struct RecvCtx {
+            std::vector<uint8_t> buf;
+            iovec iov{};
+            msghdr msg{};
+            sockaddr_in src_addr{};
+        };
+
+        std::unordered_map<uint16_t, RecvCtx> recv_ctxs_;
     };
 };

@@ -15,7 +15,7 @@
 #include <sstream>
 
 using namespace DKIM;
-std::string_view result_to_string(Result r) {
+std::string_view DKIM::result_to_string(Result r) {
     switch (r) {
     case Result::Pass: {
         return "pass";
@@ -893,7 +893,7 @@ void Verifier::finish(
     std::string explanation
 ) {
     logger.info(
-        "[DKIM] result=" + std::string(result_to_string(result)) +
+        "[DKIM] result=" + std::string(DKIM::result_to_string(result)) +
         " d=" + state->sig.domain + " s=" + state->sig.signature +
         std::string(explanation.empty() ? "" : " reason " + explanation)
     );

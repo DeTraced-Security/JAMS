@@ -10,7 +10,7 @@
 
 using namespace DMARC;
 
-std::string_view policy_to_string(Policy p) {
+std::string_view DMARC::policy_to_string(Policy p) {
     switch (p) {
     case Policy::None: {
         return "none";
@@ -26,7 +26,7 @@ std::string_view policy_to_string(Policy p) {
     return "none";
 }
 
-std::string_view result_to_string(Result r) {
+std::string_view DMARC::result_to_string(Result r) {
     switch (r) {
     case Result::Fail: {
         return "fail";

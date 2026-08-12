@@ -1,13 +1,15 @@
 #pragma once
 
 #include "io/session_factory.hpp"
+#include "io/io_uring_loop.hpp"
 #include "auth/credentials/aliases.hpp"
+
 #include <cstdint>
 #include <string>
 #include <vector>
 #include <span>
 
-class IoUringLoop;
+namespace Async { class IoUringLoop; };
 
 namespace SMTP {
     enum class SMTPState {
@@ -25,7 +27,8 @@ namespace SMTP {
         std::string body;
     };
 
-    class Session : public SessionFactory {
+    class Session : public ISession
+    {
     public:
         /// @brief Creates the SMTP Session
         /// @param conn_id 
