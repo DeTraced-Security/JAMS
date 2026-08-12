@@ -27,6 +27,13 @@ TLS::Context::Context(const std::string& cert, const std::string& key)
         throw std::runtime_error("SSL_CTX_new failed: " + ssl_error_string());
     }
 
+#ifdef WIN32_
+    // Load from win cred store
+    if (SSL_CTX_load_verify_store(ctx_, "org.openssl.winstore:") != 1) {
+        throw std::runtime_error("[FATAL] [TLS] Failed to load windows CA store" + ssl_error_string());
+    }
+#endif
+
     // enforce TLS 1.2 min
     SSL_CTX_set_min_proto_version(ctx_, TLS1_2_VERSION);
 
