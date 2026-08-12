@@ -14,7 +14,7 @@
 #include <cassert>
 
 Async::IoUringLoop::IoUringLoop(
-    uint16_t port, SessionFactory factory, unsigned queue_depth
+    uint16_t port, ISession factory, unsigned queue_depth
 ) : port_(port), session_factory_(std::move(factory)) {
     io_uring_params params{};
     params.flags = 0;

@@ -4,6 +4,8 @@
 #include "tls/tls_context.hpp"
 #include "tls/tls_conn.hpp"
 #include "dns/resolver.hpp"
+#include "smtp/submission_server.hpp"
+#include "smtp/smtp_session.hpp"
 
 #include <liburing.h>
 #include <sys/socket.h>
@@ -48,10 +50,10 @@ inline uint64_t decode_conn_id(uint64_t userdata) {
     return userdata & 0x0FFF'FFFF'FFFF'FFFF;
 }
 
-// Forward Declarations
-class SMTP::Session;
-class TLS::Connection;
-class TLS::Context;
+// // Forward Declarations
+namespace SMTP { class Session; class SubmissionServer; struct ISession; };
+namespace TLS { class Context; class Connection; };
+namespace DNS { class Resolver; };
 
 /**
  * Design Notes:
@@ -62,13 +64,12 @@ class TLS::Context;
 namespace Async {
     class IoUringLoop {
     public:
-        using SessionFactory = std::function<std::unique_ptr<SMTP::Session>(uint64_t, const std::string&, IoUringLoop&)>;
-        using SessionFactory = std::function<std::unique_ptr<SMTP::SubmissionServer>(uint64_t, const std::string&, Async::IoUringLoop&)>;
+        using ISession = std::function<std::unique_ptr<SMTP::Session>(uint64_t, const std::string&, IoUringLoop&)>;
 
         /// @brief Initialise io_uring with a queue depth of 256
         /// @param port 
         /// @param queue_depth 
-        explicit IoUringLoop(uint16_t port, SessionFactory factory, unsigned queue_depth = 256);
+        explicit IoUringLoop(uint16_t port, ISession factory, unsigned queue_depth = 256);
         ~IoUringLoop();
 
         IoUringLoop(const IoUringLoop&) = delete;
@@ -167,11 +168,11 @@ namespace Async {
             int fd{ -1 };
         };
 
-        SessionFactory session_factory_;
+        ISession session_factory_;
 
         uint64_t next_conn_id{ 1 };
         std::unordered_map<uint64_t, ConnBuffer> buffers_;
-        std::unordered_map<uint64_t, std::unique_ptr<SMTP::Session>> sessions_;
+        std::unordered_map<uint64_t, std::unique_ptr<SMTP::ISession>> sessions_;
         std::unordered_map<uint64_t, std::unique_ptr<TLS::Connection>> tls_conns_;
     };
 };

@@ -12,7 +12,7 @@
 #include <span>
 #include <string>
 
-class Async::IoUringLoop;
+namespace Async { class IoUringLoop; };
 
 // SMTP submission session for port 587 (RFC 6409).
 //
@@ -31,7 +31,7 @@ class Async::IoUringLoop;
 //   before TLS is established, we respond with 538 (encryption required).
 namespace SMTP
 {
-    class SubmissionServer : public SessionFactory
+    class SubmissionServer : public ISession
     {
     public:
         SubmissionServer(
@@ -53,7 +53,7 @@ namespace SMTP
             return sasl_.authenticated();
         }
 
-        bool wants_close() const override
+        bool wants_close() const
         {
             return pending_close_;
         }

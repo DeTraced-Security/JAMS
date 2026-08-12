@@ -52,7 +52,7 @@ namespace IMAP {
     //   Authenticated    -> Selected (after SELECT/EXAMINE)
     //   Selected         -> Authenticated (after CLOSE)
     //   Any              -> Logout (after LOGOUT)
-    class Session : public SessionFactory {
+    class Session : public SMTP::ISession {
     public:
         Session(
             uint64_t conn_id, std::string remote_ip, Async::IoUringLoop& loop,
