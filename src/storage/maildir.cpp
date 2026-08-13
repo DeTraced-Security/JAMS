@@ -19,7 +19,7 @@ bool MailDir::ensure_dirs() {
 
     std::error_code ec;
     for (const char* sub : { ".Sent", ".Trash" }) {
-        fs::create_directories(base_ / sub, ec);
+        fs::create_directories((base_ / sub), ec);
         logger.debug("[MAILDIR] Creating " + std::string(base_ / sub) + " directory");
         if (ec) {
             logger.debug("[MAILDIR] create_directories(" + std::string((base_ / sub)) + "): " + ec.message());
@@ -29,7 +29,7 @@ bool MailDir::ensure_dirs() {
     }
 
     for (const char* sub : { "tmp", "new", "cur" }) {
-        fs::create_directories(base_ / sub, ec);
+        fs::create_directories((base_ / sub), ec);
         if (ec) {
             logger.debug("[MAILDIR] create_directories(" + std::string((base_ / sub)) + "): " + ec.message());
 

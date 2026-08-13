@@ -657,6 +657,11 @@ bool SubmissionServer::relay_outbound(
 
     logger.debug("[RELAY] MX For: " + domain + " -> " + mx_host + " (prio=" + std::to_string(mx_prio) + ")");
 
+    logger.debug("[RELAY] body separator search on " + std::to_string(body.size()) + " bytes: " +
+        (body.find("\r\n\r\n") != std::string::npos ? "found \\r\\n\\r\\n" :
+            body.find("\n\n") != std::string::npos ? "found \\n\\n (no CRLF!)" :
+            "NO SEPARATOR FOUND"));
+
     struct addrinfo hints {}, * res = nullptr;
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
@@ -830,8 +835,8 @@ bool SubmissionServer::relay_outbound(
                 msg_body = body.substr(sep + 2);
             }
             else {
-                msg_headers = body;
-                msg_body = "";
+                logger.error("[RELAY] No header/body separator found in messafe - malformed");
+                return false;
             }
         }
 
