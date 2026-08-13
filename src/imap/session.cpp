@@ -93,7 +93,9 @@ void Session::process_line(const std::string& line) {
         return;
     }
 
-    logger.info("[IMAP] " + std::to_string(conn_id_) + " " + line);
+    if (line.find_first_of("LOGIN \"") == 0) { /// Ignore credentials 
+        logger.debug("[IMAP] " + std::to_string(conn_id_) + " " + line);
+    }
 
     std::istringstream ss(line);
     std::string tag, command;
@@ -455,6 +457,8 @@ void Session::complete_append() {
         base += "/." + append_mailbox_;
     }
 
+    ensure_mailbox_dirs(base);
+
     std::string path = base + "/cur/" + fname;
     std::ofstream out(path, std::ios::binary);
 
@@ -485,6 +489,9 @@ void Session::ensure_mailbox_dirs(const std::string& mailbox) {
     if (mailbox != "INBOX") {
         base += "/." + mailbox;
     }
+
+    // Sanity check to ensure the base dir is real
+    ::mkdir(base.c_str(), 0700);
 
     for (const char* sub : { "cur", "new", "tmp" }) {
         std::string dir = base + "/" + sub;

@@ -18,8 +18,18 @@ bool MailDir::ensure_dirs() {
     namespace fs = std::filesystem;
 
     std::error_code ec;
+    for (const char* sub : { ".Sent", ".Trash" }) {
+        fs::create_directories((base_ / sub), ec);
+        logger.debug("[MAILDIR] Creating " + std::string(base_ / sub) + " directory");
+        if (ec) {
+            logger.debug("[MAILDIR] create_directories(" + std::string((base_ / sub)) + "): " + ec.message());
+
+            return false;
+        }
+    }
+
     for (const char* sub : { "tmp", "new", "cur" }) {
-        fs::create_directories(base_ / sub, ec);
+        fs::create_directories((base_ / sub), ec);
         if (ec) {
             logger.debug("[MAILDIR] create_directories(" + std::string((base_ / sub)) + "): " + ec.message());
 
@@ -35,7 +45,15 @@ std::optional<std::string> MailDir::deliver(
     const std::string& rcpt_to,
     const std::string& body
 ) {
-    if (!ensure_dirs()) {
+    // Check to prevent `/var/mail/vhost{username}/...
+    if (!base_.filename().string().ends_with("/")) {
+        base_ = base_.append("/");
+    }
+
+    bool ensured_dirs = ensure_dirs();
+
+    if (!ensured_dirs) {
+        logger.error("[MAILDIR] Failed to ensure directories exist");
         return "";
     }
 
@@ -87,7 +105,7 @@ std::optional<std::string> MailDir::deliver(
     std::filesystem::rename(tmp_path, new_path, ec);
 
     if (ec) {
-        logger.error("[MAILDIR] Rename to new/ faield: " + ec.message());
+        logger.error("[MAILDIR] Rename to new/ failed: " + ec.message());
 
         std::filesystem::remove(tmp_path, ec);
         return "";

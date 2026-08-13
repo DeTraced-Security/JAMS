@@ -406,9 +406,9 @@ void SubmissionServer::cmd_rcpt(std::string_view arg) {
         return;
     }
 
-    if (domain != get_hostname()) {
-        reply(500, "5.7.1 Relaying denied");
-    }
+    // if (domain != get_hostname()) {
+    //     reply(500, "5.7.1 Relaying denied");
+    // }
 
     std::string resolved = aliases_.resolve(addr);
     bool is_alias = (resolved != addr);
@@ -652,7 +652,15 @@ bool SubmissionServer::relay_outbound(
         mx_host = domain;
     }
 
+    logger.info("[RELAY] envelope MAIL FROM = <" + from + ">");
+    logger.info("[RELAY] envelope RCPT TO   = <" + to + ">");
+
     logger.debug("[RELAY] MX For: " + domain + " -> " + mx_host + " (prio=" + std::to_string(mx_prio) + ")");
+
+    logger.debug("[RELAY] body separator search on " + std::to_string(body.size()) + " bytes: " +
+        (body.find("\r\n\r\n") != std::string::npos ? "found \\r\\n\\r\\n" :
+            body.find("\n\n") != std::string::npos ? "found \\n\\n (no CRLF!)" :
+            "NO SEPARATOR FOUND"));
 
     struct addrinfo hints {}, * res = nullptr;
     hints.ai_family = AF_INET;
@@ -700,27 +708,78 @@ bool SubmissionServer::relay_outbound(
         return line;
         };
 
+    auto send_all = [&](std::string_view data) -> bool {
+        size_t sent = 0;
+
+        while (sent < data.size()) {
+            ssize_t n = ::send(
+                sock, data.data() + sent,
+                data.size() - sent, 0
+            );
+
+            if (n <= 0) {
+                logger.error("[RELAY] send() failed: " + std::string(strerror(errno)));
+                return false;
+            }
+
+            sent += static_cast<size_t>(n);
+        }
+
+        return true;
+        };
+
     auto send_line = [&](const std::string& line) {
         logger.debug("[RELAY] " + line);
 
         std::string out = line + "\r\n";
-        ::send(sock, out.c_str(), out.size(), 0);
+        return send_all(line + "\r\n");
         };
 
-    auto expect = [&](int code) -> bool {
-        // read until non-continuatin
+    auto expect = [&](int expected) -> bool {
         std::string last;
+
         while (true) {
             last = recv_line();
+
+            if (last.empty()) {
+                logger.error("[RELAY] Connection closed/timeout waiting for SMTP response");
+                return false;
+            }
+
+            logger.debug("[RELAY] <-- " + last);
+
             if (last.size() >= 4 && last[3] == ' ') {
                 break;
             }
+
             if (last.size() < 4) {
-                break;
+                logger.error("[RELAY] Malformed SMTP response: " + last);
+                return false;
             }
         }
 
-        return last.size() >= 3 && std::stoi(last.substr(0, 3)) == code;
+        if (last.size() < 3) {
+            return false;
+        }
+
+        int actual = 0;
+        try {
+            actual = std::stoi(last.substr(0, 3));
+        }
+        catch (...) {
+            logger.error("[RELAY] Invalid SMTP response: " + last);
+            return false;
+        }
+
+        if (actual != expected) {
+            logger.error(
+                "[RELAY] Expected " + std::to_string(expected) +
+                ", got: " + last
+            );
+            return false;
+        }
+
+        return true;
         };
 
     bool ok = true;
@@ -776,13 +835,15 @@ bool SubmissionServer::relay_outbound(
                 msg_body = body.substr(sep + 2);
             }
             else {
-                msg_headers = body;
-                msg_body = "";
+                logger.error("[RELAY] No header/body separator found in messafe - malformed");
+                return false;
             }
         }
 
         try {
+            logger.debug("[RELAY] Outbound headers:\n" + msg_headers);
             outbound = dkim_signer_.sign(msg_headers, msg_body);
+            logger.debug("[RELAY] Signed message:\n" + outbound);
         }
         catch (const std::exception& e) {
             logger.error("[OUTBOUND_RELAY] DKIM Signing failed: " + std::string(e.what()));

@@ -231,7 +231,7 @@ std::string Signer::sign(const std::string& headers, const std::string& body) {
     std::string signing_data = build_signing_data(headers, dkim_header);
     std::string signature = rsa_sha256_sign(signing_data);
 
-    return dkim_header + signature;
+    return headers + dkim_header + signature;
 }
 
 std::string Signer::rsa_sha256_sign(const std::string& data) const {
