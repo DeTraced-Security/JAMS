@@ -45,6 +45,11 @@ std::optional<std::string> MailDir::deliver(
     const std::string& rcpt_to,
     const std::string& body
 ) {
+    // Check to prevent `/var/mail/vhost{username}/...
+    if (!base_.filename().string().ends_with("/")) {
+        base_ = base_.append("/");
+    }
+
     bool ensured_dirs = ensure_dirs();
 
     if (!ensured_dirs) {
