@@ -47,6 +47,7 @@ set(SOURCES
     src/io/io_uring_loop.cpp
     src/tls/tls_context.cpp
     src/tls/tls_conn.cpp
+    src/tls/tls_client.cpp
     src/storage/maildir.cpp
     src/dns/message.cpp
     src/dns/resolver.cpp
@@ -72,7 +73,6 @@ target_include_directories(mailserver PRIVATE
     ${LIBURING_INCLUDE_DIR}
     ${OPENSSL_INCLUDE_DIR}
     ${SQLite3_INCLUDE_DIRS}
-    ${CMAKE_SOURCE_DIR}/include/config
 )
 
 target_link_libraries(mailserver PRIVATE
