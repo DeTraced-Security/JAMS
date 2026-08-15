@@ -231,7 +231,7 @@ sudo systemctl enable --now jams
 
 ---
 # Configuration
-Currently, `config/server.toml` is reserved for future use. All parameters are supplied at runtime by CLI flags or compile-time constants:
+Below is a table of configurable variables in JAMS, which can be changed with the `config/server.toml` file and their respective source files:
 
 | Parameter                  | Current Value            | Source File                 |
 | -------------------------- | ------------------------ | --------------------------- |
@@ -245,7 +245,7 @@ Currently, `config/server.toml` is reserved for future use. All parameters are s
 | Max Recipients             | 100                      | `src/smtp/smtp_session.cpp` |
 
 > [!NOTE]
-> Full `server.toml` parsing is planned for a future release. Until then, changes to the above constants require a full recompile.
+> Max Message Size and Max Recipients is non-configurable to better align with their applicable RFCs and will be made configurable once JAMS has reached it's stable release (v1.0.0)
 
 ---
 # Protocol Support
