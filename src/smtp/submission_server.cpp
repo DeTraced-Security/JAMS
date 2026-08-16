@@ -929,6 +929,8 @@ bool SubmissionServer::relay_outbound(
             logger.debug("[RELAY] Outbound headers:\n" + msg_headers);
             outbound = dkim_signer_.sign(msg_headers, msg_body);
             logger.debug("[RELAY] Signed message:\n" + outbound);
+
+            outbound += "\r\n" + msg_body;
         }
         catch (const std::exception& e) {
             logger.error("[OUTBOUND_RELAY] DKIM Signing failed: " + std::string(e.what()));
