@@ -68,6 +68,8 @@ namespace IMAP {
         }
 
     private:
+        std::string message_path(const MessageMeta& msg) const;
+
         void process_line(const std::string& line);
 
         void cmd_capability(const std::string& tag);
