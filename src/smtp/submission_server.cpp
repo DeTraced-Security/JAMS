@@ -846,7 +846,7 @@ bool SubmissionServer::relay_outbound(
             ehlo_caps.begin(), ehlo_caps.end(),
             [](const std::string& line) {
                 std::string upper = line;
-                std::transform(upper.begin(), upper.end(), upper.begin(), ::tolower);
+                std::transform(upper.begin(), upper.end(), upper.begin(), ::toupper);
 
                 return upper.find("STARTTLS") != std::string::npos;
             }
