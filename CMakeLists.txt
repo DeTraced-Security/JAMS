@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(mailserver LANGUAGES C CXX)
+project(mailserver CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -45,31 +45,25 @@ message(STATUS "OpenSSL:  ${OPENSSL_VERSION}")
 set(SOURCES
     src/main.cpp
     src/io/io_uring_loop.cpp
+    src/smtp/smtp_session.cpp
     src/tls/tls_context.cpp
     src/tls/tls_conn.cpp
-    src/tls/tls_client.cpp
     src/storage/maildir.cpp
-    src/dns/message.cpp
-    src/dns/resolver.cpp
-    src/auth/spf/checker.cpp
-    src/auth/sasl/sasl.cpp
-    src/auth/dmarc/checker.cpp
-    src/auth/dkim/verifier.cpp
-    src/auth/dkim/signer.cpp
-    src/auth/credentials/cred_store.cpp
-    src/auth/credentials/aliases.cpp
+    src/dns/dns_message.cpp
+    src/dns/dns_resolver.cpp
+    src/auth/spf_checker.cpp
+    src/auth/sasl.cpp
+    src/auth/dmarc_checker.cpp
+    src/auth/dkim_verifier.cpp
+    src/auth/cred_store.cpp
     src/smtp/submission_server.cpp
-    src/smtp/smtp_session.cpp
-    src/imap/session.cpp
-    src/utils/logger.cpp
-    src/utils/config/toml_parse.cpp
-    src/utils/config/tomlc17.c
+    src/imap/imap_session.cpp
 )
 
 add_executable(mailserver ${SOURCES})
 
 target_include_directories(mailserver PRIVATE
-    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/src
     ${LIBURING_INCLUDE_DIR}
     ${OPENSSL_INCLUDE_DIR}
     ${SQLite3_INCLUDE_DIRS}

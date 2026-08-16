@@ -72,5 +72,3 @@ venv
 logs/
 .pytest*
 .vscode/
-venv/
-logs/

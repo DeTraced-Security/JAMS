@@ -1,6 +1,4 @@
-#include "storage/maildir.hpp"
-#include "globals.hpp"
-
+#include "maildir.hpp"
 #include <unistd.h>
 #include <sys/types.h>
 #include <chrono>
@@ -10,29 +8,18 @@
 #include <iostream>
 #include <sstream>
 
-using namespace Storage;
-
 MailDir::MailDir(std::string base_path) : base_(std::move(base_path)) {};
 
 bool MailDir::ensure_dirs() {
     namespace fs = std::filesystem;
 
     std::error_code ec;
-    for (const char* sub : { ".Sent", ".Trash" }) {
-        fs::create_directories((base_ / sub), ec);
-        logger.debug("[MAILDIR] Creating " + std::string(base_ / sub) + " directory");
+    for (const char* sub : {"tmp", "new", "cur"}) {
+        fs::create_directories(base_ / sub, ec);
         if (ec) {
-            logger.debug("[MAILDIR] create_directories(" + std::string((base_ / sub)) + "): " + ec.message());
-
-            return false;
-        }
-    }
-
-    for (const char* sub : { "tmp", "new", "cur" }) {
-        fs::create_directories((base_ / sub), ec);
-        if (ec) {
-            logger.debug("[MAILDIR] create_directories(" + std::string((base_ / sub)) + "): " + ec.message());
-
+            std::cerr << "[maildir] create_directories(" 
+                << (base_ / sub) << "): " << ec.message() << std::endl;
+            
             return false;
         }
     }
@@ -40,21 +27,13 @@ bool MailDir::ensure_dirs() {
     return true;
 }
 
-std::optional<std::string> MailDir::deliver(
+bool MailDir::deliver(
     const std::string& mail_from,
-    const std::string& rcpt_to,
+    const std::string& rcpt_to, 
     const std::string& body
 ) {
-    // Check to prevent `/var/mail/vhost{username}/...
-    if (!base_.filename().string().ends_with("/")) {
-        base_ = base_.append("/");
-    }
-
-    bool ensured_dirs = ensure_dirs();
-
-    if (!ensured_dirs) {
-        logger.error("[MAILDIR] Failed to ensure directories exist");
-        return "";
+    if (!ensure_dirs()) {
+        return false;
     }
 
     // Building the mesasge
@@ -64,19 +43,19 @@ std::optional<std::string> MailDir::deliver(
     std::tm tm_buf{};
 
     if (localtime_r(&now_t, &tm_buf) == nullptr) {
-        logger.error("[MAILDIR] localtime_r failed: " + std::string(strerror(errno)));
-        return "";
-    }
+        std::cerr << "[MailDir] localtime_r failed: " << strerror(errno) << std::endl;
+        return false;
+    }    
 
     // RFC-2822 date format:
     std::strftime(
-        date_buf, sizeof(date_buf),
+        date_buf, sizeof(date_buf), 
         "%a, %d %b %Y %H:%M:%S %z",
         &tm_buf
     );
 
     std::string message = "Received: from unknown (HELO unknown)\r\n"
-        "   by " + get_hostname() + " from <" + mail_from + "> for <" + rcpt_to + ">; \r\n"
+        "   by mail.detraced.org from <" + mail_from + "> for <" + rcpt_to + ">; \r\n"
         "   " + date_buf + "\r\n" + body;
 
     // Create file and write to tmp/
@@ -86,14 +65,15 @@ std::optional<std::string> MailDir::deliver(
     {
         std::ofstream ofs(tmp_path, std::ios::binary | std::ios::trunc);
         if (!ofs) {
-            logger.error("[MAILDIR] open(" + std::string(tmp_path.c_str()) + ") failed: " + std::string(strerror(errno)));
-            return "";
+            std::cerr << "[maildir] open(" << tmp_path << "): "
+                << strerror(errno) << std::endl;
+            return false;
         }
 
         ofs.write(message.data(), static_cast<std::streamsize>(message.size()));
         if (!ofs) {
-            logger.error("[MAILDIR] Write failed for: " + std::string(tmp_path.c_str()));
-            return "";
+            std::cerr << "[maildir] write failed for " << tmp_path << std::endl;
+            return false;
         }
 
         ofs.flush();
@@ -103,40 +83,14 @@ std::optional<std::string> MailDir::deliver(
     auto new_path = base_ / "new" / fname;
     std::error_code ec;
     std::filesystem::rename(tmp_path, new_path, ec);
-
+    
     if (ec) {
-        logger.error("[MAILDIR] Rename to new/ failed: " + ec.message());
-
+        std::cerr << "[maildir] rename to new/ failed: " << ec.message() << std::endl;
         std::filesystem::remove(tmp_path, ec);
-        return "";
-    }
-
-    logger.info("[MAILDIR] Delivered to " + std::string(new_path.c_str()));
-    return std::string(new_path.c_str());
-}
-
-bool MailDir::is_safe(const std::string& addr) {
-    if (addr.empty() || addr.size() > 64) {
         return false;
     }
 
-    for (char c : addr) {
-        // Disallow non-standard characters in domain names
-        if (!std::isalnum(
-            static_cast<unsigned char>(c)) && c != '.' && c != '-' && c != '_' && c != '+') {
-            return false;
-        }
-    }
-
-    // Reject leading/trailing dots and double dots
-    if (addr.front() == '.' || addr.back() == '.') {
-        return false;
-    }
-
-    if (addr.find("..") != std::string::npos) {
-        return false;
-    }
-
+    std::cout << "[maildir] delivered to " << new_path << std::endl;
     return true;
 }
 
@@ -158,9 +112,9 @@ std::string MailDir::unique_filename(size_t body_size) const {
     char hostname[64] = "localhost";
 
     if (::gethostname(hostname, sizeof(hostname)) != 0) {
-        logger.error("[MAILDIR] gethostname failed: " + std::string(strerror(errno)) + "; using fallback hostname 'localhost'");
-    }
-    else {
+        std::cerr << "[maildir] gethostname failed: " << std::strerror(errno)
+            << "; using fallback hostname 'localhost'" << std::endl;
+    } else {
         hostname[sizeof(hostname) - 1] = '\0';
     }
 
@@ -178,7 +132,7 @@ std::string MailDir::unique_filename(size_t body_size) const {
         << "." << hostname
         << ",S=" << body_size
         << ":2,";   // Maildir++ flags field (empty = no flags)
-
+    
     return oss.str();
 }
 

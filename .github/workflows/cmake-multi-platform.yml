@@ -13,27 +13,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:  
-        - os: ubuntu-24.04
-          build_type: Debug
-          cc: gcc
-          cxx: g++
-  
-        - os: ubuntu-24.04
-          build_type: Release
-          cc: gcc
-          cxx: g++
-  
-        - os: ubuntu-24.04
-          build_type: Debug
-          cc: clang
-          cxx: clang++
-  
-        - os: ubuntu-24.04
-          build_type: Release
-          cc: clang
-          cxx: clang++
-    steps:        
+        os: [ubuntu-24.04, ubuntu-22.04]
+        build_type: [Release, Debug]
+        compiler:
+          - { c: gcc,   cpp: g++      }
+          - { c: clang, cpp: clang++  }
+
+    steps:
     - uses: actions/checkout@v4
 
     - name: Install dependencies
@@ -46,7 +32,7 @@ jobs:
           ninja-build
 
     - name: Install clang
-      if: matrix.cc == 'clang'
+      if: matrix.compiler.c == 'clang'
       run: sudo apt-get install -y clang
 
     - name: Set build directory
@@ -57,8 +43,8 @@ jobs:
       run: >
         cmake -B ${{ steps.strings.outputs.build-dir }}
         -G Ninja
-        -DCMAKE_CXX_COMPILER=${{ matrix.cxx }}
-        -DCMAKE_C_COMPILER=${{ matrix.cc }}
+        -DCMAKE_CXX_COMPILER=${{ matrix.compiler.cpp }}
+        -DCMAKE_C_COMPILER=${{ matrix.compiler.c }}
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
         -S ${{ github.workspace }}
 
