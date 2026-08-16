@@ -960,7 +960,7 @@ bool SubmissionServer::relay_outbound(
 
     send_line("QUIT");
     expect(221);
-    ::close(sock);
+    close_conn();
 
     logger.debug("[RELAY] Delivery to " + to + std::string(ok ? "succeeded" : "failed"));
     return ok;
