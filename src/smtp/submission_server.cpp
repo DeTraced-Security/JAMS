@@ -1,6 +1,7 @@
 #include "smtp/submission_server.hpp"
 #include "io/io_uring_loop.hpp"
 #include "storage/maildir.hpp"
+#include "tls/tls_client.hpp"
 #include "globals.hpp"
 
 #include <cctype>
@@ -671,11 +672,46 @@ bool SubmissionServer::relay_outbound(
         return false;
     }
 
+    static const TLS::ClientContext client_ctx;
+    bool tls_active{ false };
+    SSL* ssl{ nullptr };
+
     int sock = ::socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) {
         freeaddrinfo(res);
         return false;
     }
+
+    auto close_conn = [&]() {
+        if (ssl) {
+            SSL_shutdown(ssl);
+            SSL_free(ssl);
+
+            ssl = nullptr;
+        }
+
+        ::close(sock);
+        };
+
+    auto raw_send = [&](const char* data, size_t n) -> ssize_t {
+        if (tls_active && ssl) {
+            int written = SSL_write(ssl, data, static_cast<int>(n));
+
+            return written > 0 ? written : -1;
+        }
+
+        return ::send(sock, data, n, 0);
+        };
+
+    auto raw_recv_byte = [&](char& c) -> ssize_t {
+        if (tls_active && ssl) {
+            int n = SSL_read(ssl, &c, 1);
+
+            return n > 0 ? n : -1;
+        }
+
+        return ::recv(sock, &c, 1, 0);
+        };
 
     // 30 second timeout
     struct timeval tv { .tv_sec = 30, .tv_usec = 0 };
@@ -697,7 +733,7 @@ bool SubmissionServer::relay_outbound(
         std::string line;
         char c;
 
-        while (::recv(sock, &c, 1, 0) == 1) {
+        while (raw_recv_byte(c) == 1) {
             line += c;
             if (line.size() >= 2 && line[line.size() - 2] == '\r' && line.back() == '\n') {
                 break;
@@ -712,10 +748,7 @@ bool SubmissionServer::relay_outbound(
         size_t sent = 0;
 
         while (sent < data.size()) {
-            ssize_t n = ::send(
-                sock, data.data() + sent,
-                data.size() - sent, 0
-            );
+            ssize_t n = raw_send(data.data() + sent, data.size() - sent);
 
             if (n <= 0) {
                 logger.error("[RELAY] send() failed: " + std::string(strerror(errno)));
@@ -735,7 +768,7 @@ bool SubmissionServer::relay_outbound(
         return send_all(line + "\r\n");
         };
 
-    auto expect = [&](int expected) -> bool {
+    auto expect_multiline = [&](int expected, std::vector<std::string>* out_lines) -> bool {
         std::string last;
 
         while (true) {
@@ -747,6 +780,10 @@ bool SubmissionServer::relay_outbound(
             }
 
             logger.debug("[RELAY] <-- " + last);
+
+            if (out_lines) {
+                out_lines->push_back(last);
+            }
 
             if (last.size() >= 4 && last[3] == ' ') {
                 break;
@@ -782,6 +819,10 @@ bool SubmissionServer::relay_outbound(
         return true;
         };
 
+    auto expect = [&](int expected) -> bool {
+        return expect_multiline(expected, nullptr);
+        };
+
     bool ok = true;
 
     if (!expect(220)) {
@@ -789,12 +830,56 @@ bool SubmissionServer::relay_outbound(
         return false;
     }
 
+    std::vector<std::string> ehlo_caps;
     send_line("EHLO " + get_hostname());
-    if (!expect(250)) {
+    bool ehlo_ok = expect_multiline(250, &ehlo_caps);
+
+    if (!ehlo_ok) {
         send_line("HELO " + get_hostname());
         if (!expect(250)) {
-            ::close(sock);
+            close_conn();
             return false;
+        }
+    }
+    else {
+        bool supports_tls = std::any_of(
+            ehlo_caps.begin(), ehlo_caps.end(),
+            [](const std::string& line) {
+                std::string upper = line;
+                std::transform(upper.begin(), upper.end(), upper.begin(), ::tolower);
+
+                return upper.find("STARTTLS") != std::string::npos;
+            }
+        );
+
+        if (supports_tls) {
+            send_line("STARTTLS");
+            if (expect(220)) {
+                ssl = client_ctx.handshake(sock, mx_host);
+                if (ssl) {
+                    tls_active = true;
+                    logger.info("[RELAY] TLS established with: " + mx_host);
+
+                    /// RFC 3207 - must discard prior EHLO states and re-greet over TLS
+                    std::vector<std::string> post_tls_caps;
+                    send_line("EHLO " + get_hostname());
+                    if (!expect_multiline(250, &post_tls_caps)) {
+                        logger.error("[RELAY] EHLO after STARTTLS failed for: " + mx_host);
+                        close_conn();
+
+                        return false;
+                    }
+                }
+                else {
+                    logger.error("[RELAY] TLS handshake failed for: " + mx_host);
+                    close_conn();
+
+                    return false;
+                }
+            }
+            else {
+                logger.warn("[RELAY] " + mx_host + " advertised STARTTLS but rejected the command. Continuing as plaintext");
+            }
         }
     }
 
@@ -835,7 +920,7 @@ bool SubmissionServer::relay_outbound(
                 msg_body = body.substr(sep + 2);
             }
             else {
-                logger.error("[RELAY] No header/body separator found in messafe - malformed");
+                logger.error("[RELAY] No header/body separator found in message - malformed");
                 return false;
             }
         }
