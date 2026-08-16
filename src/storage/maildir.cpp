@@ -100,6 +100,10 @@ std::optional<std::string> MailDir::deliver(
     // Atomically move to new/
     auto new_path = base_ / "new" / fname;
     std::error_code ec;
+
+    logger.debug("[MAILDIR] tmp_path = " + tmp_path.string());
+    logger.debug("[MAILDIR] new_path = " + new_path.string());
+
     std::filesystem::rename(tmp_path, new_path, ec);
 
     if (ec) {
