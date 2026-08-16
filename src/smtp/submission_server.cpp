@@ -535,7 +535,7 @@ bool SubmissionServer::deliver() {
                 continue;
             }
 
-            Storage::MailDir mdir(get_mailroot() + mailbox_user);
+            Storage::MailDir mdir(target_path);
             auto stored_path = mdir.deliver(env_.mail_from, rcpt, env_.body);
 
             if (!stored_path) {
