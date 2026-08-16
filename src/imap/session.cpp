@@ -452,12 +452,13 @@ void Session::complete_append() {
 
     fname += ":2," + flag_chars;
 
+
+    ensure_mailbox_dirs(append_mailbox_);
+
     std::string base = mail_root_ + "/" + username_;
     if (append_mailbox_ != "INBOX") {
         base += "/." + append_mailbox_;
     }
-
-    ensure_mailbox_dirs(base);
 
     std::string path = base + "/cur/" + fname;
     std::ofstream out(path, std::ios::binary);
@@ -976,7 +977,7 @@ void Session::cmd_close(const std::string& tag) {
         for (auto& msg : messages_) {
             if (msg.flags.find("\\Deleted") != std::string::npos) {
                 std::string dir = msg.in_cur ? "/cur/" : "/new/";
-                std::string path = mail_root_ + username_ + dir + msg.filename;
+                std::string path = mail_root_ + "/" + username_ + dir + msg.filename;
 
                 ::unlink(path.c_str());
             }
