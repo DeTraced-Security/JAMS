@@ -398,18 +398,19 @@ void SubmissionServer::cmd_rcpt(std::string_view arg) {
     }
 
     auto at = addr.find('@');
-    std::string domain = (at != std::string::npos) ? addr.substr(at + 1) : "";
+    const std::string domain = (at != std::string::npos) ? addr.substr(at + 1) : "";
+    const std::string domain_lower = domain;
+    std::transform(domain_lower.begin(), domain_lower.end(), domain_lower.begin(), ::tolower);
 
-    std::transform(domain.begin(), domain.end(), domain.begin(), ::tolower);
-
-    if (!Storage::MailDir::is_safe(domain)) {
+    if (!Storage::MailDir::is_safe(domain_lower)) {
         reply(550, "Mailbox unavailable");
         return;
     }
 
-    // if (domain != get_hostname()) {
-    //     reply(500, "5.7.1 Relaying denied");
-    // }
+    if (domain_lower != get_hostname()) {
+        reply(550, "5.7.1 Relaying denied");
+        return;
+    }
 
     std::string resolved = aliases_.resolve(addr);
     bool is_alias = (resolved != addr);
