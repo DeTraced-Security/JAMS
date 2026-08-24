@@ -399,7 +399,7 @@ void SubmissionServer::cmd_rcpt(std::string_view arg) {
 
     auto at = addr.find('@');
     const std::string domain = (at != std::string::npos) ? addr.substr(at + 1) : "";
-    const std::string domain_lower = domain;
+    std::string domain_lower = domain;
     std::transform(domain_lower.begin(), domain_lower.end(), domain_lower.begin(), ::tolower);
 
     if (!Storage::MailDir::is_safe(domain_lower)) {
@@ -407,7 +407,7 @@ void SubmissionServer::cmd_rcpt(std::string_view arg) {
         return;
     }
 
-    if (domain_lower != get_hostname()) {
+    if (domain != get_hostname()) {
         reply(550, "5.7.1 Relaying denied");
         return;
     }
