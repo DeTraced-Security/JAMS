@@ -10,3 +10,6 @@ submissions = 587
 
 [database]
 dbpath = "/var/lib/jams/users.db"
+
+[reporting]
+ip_alert_mta = "john.doe@example.com"

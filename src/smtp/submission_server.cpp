@@ -25,7 +25,7 @@ SubmissionServer::SubmissionServer(
         .domain = get_hostname(),
         .selector = "jams",
         .priv_key_path = "/etc/jams/tls/key.pem"
-    }), conn_id_(conn_id), remote_ip_(remote_ip), loop_(loop), sasl_(store), aliases_(aliases) {
+    }), conn_id_(conn_id), remote_ip_(remote_ip), loop_(loop), sasl_(store, remote_ip), aliases_(aliases) {
     reply(220, get_hostname() + " ESMTP submission");
 }
 
@@ -653,16 +653,6 @@ bool SubmissionServer::relay_outbound(
     if (mx_host.empty()) {
         mx_host = domain;
     }
-
-    logger.info("[RELAY] envelope MAIL FROM = <" + from + ">");
-    logger.info("[RELAY] envelope RCPT TO   = <" + to + ">");
-
-    logger.debug("[RELAY] MX For: " + domain + " -> " + mx_host + " (prio=" + std::to_string(mx_prio) + ")");
-
-    logger.debug("[RELAY] body separator search on " + std::to_string(body.size()) + " bytes: " +
-        (body.find("\r\n\r\n") != std::string::npos ? "found \\r\\n\\r\\n" :
-            body.find("\n\n") != std::string::npos ? "found \\n\\n (no CRLF!)" :
-            "NO SEPARATOR FOUND"));
 
     struct addrinfo hints {}, * res = nullptr;
     hints.ai_family = AF_INET;

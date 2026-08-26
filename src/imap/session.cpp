@@ -540,7 +540,7 @@ void Session::cmd_login(const std::string& tag, const std::string& args) {
         return;
     }
 
-    if (!cred_store_.verify(user, pass)) {
+    if (!cred_store_.verify(user, pass, remote_ip_)) {
         no(tag, "[AUTHENTICATIONFAILED] Invalid credentials");
         return;
     }
@@ -1072,7 +1072,7 @@ void Session::complete_plain_auth(const std::string& tag, const std::string& b64
     auto at = user.find('@');
     if (at != std::string::npos) user = user.substr(0, at);
 
-    if (!cred_store_.verify(user, pass)) {
+    if (!cred_store_.verify(user, pass, remote_ip_)) {
         no(tag, "[AUTHENTICATIONFAILED] Invalid credentials");
         return;
     }
@@ -1325,7 +1325,6 @@ std::vector<uint32_t> Session::parse_sequence_set(
 }
 
 void Session::send(const std::string& line) {
-    logger.info("[IMAP] " + std::to_string(conn_id_) + " > " + line);
     std::string out = line + "\r\n";
 
     loop_.submit_write(conn_id_, std::vector<uint8_t>(out.begin(), out.end()));

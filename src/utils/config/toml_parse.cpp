@@ -45,7 +45,7 @@ bool TOMLParser::load_configs() {
 
 std::unordered_map<std::string, std::string> TOMLParser::fetch_configs() {
     std::unordered_map<std::string, std::string> results = {};
-    std::string hostname, mailroot, db_path;
+    std::string hostname, mailroot, db_path, ip_reporting_mta;
     int64_t smtp = 0, submissions = 0, imap4 = 0, imap4s = 0;
 
     try {
@@ -57,6 +57,8 @@ std::unordered_map<std::string, std::string> TOMLParser::fetch_configs() {
         imap4s = toml_results->get({ "ports", "imap4s" })->as_int().value();
 
         db_path = toml_results->get({ "database", "dbpath" })->as_str().value();
+
+        ip_reporting_mta = toml_results->get({ "reporting", "ip_alert_mta" })->as_str().value();
     }
     catch (const std::bad_optional_access& ex) {
         error("missing or invalid server/ports/database properties in config");
@@ -69,7 +71,8 @@ std::unordered_map<std::string, std::string> TOMLParser::fetch_configs() {
         { "submissions", std::to_string(submissions) },
         { "imap4", std::to_string(imap4) },
         { "imap4s", std::to_string(imap4s) },
-        { "db_path", db_path }
+        { "db_path", db_path },
+        { "ip_alert_mta", ip_reporting_mta }
         });
 
     return results;
