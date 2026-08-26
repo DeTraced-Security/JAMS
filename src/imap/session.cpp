@@ -540,7 +540,7 @@ void Session::cmd_login(const std::string& tag, const std::string& args) {
         return;
     }
 
-    if (!cred_store_.verify(user, pass)) {
+    if (!cred_store_.verify(user, pass, remote_ip_)) {
         no(tag, "[AUTHENTICATIONFAILED] Invalid credentials");
         return;
     }
@@ -1072,7 +1072,7 @@ void Session::complete_plain_auth(const std::string& tag, const std::string& b64
     auto at = user.find('@');
     if (at != std::string::npos) user = user.substr(0, at);
 
-    if (!cred_store_.verify(user, pass)) {
+    if (!cred_store_.verify(user, pass, remote_ip_)) {
         no(tag, "[AUTHENTICATIONFAILED] Invalid credentials");
         return;
     }

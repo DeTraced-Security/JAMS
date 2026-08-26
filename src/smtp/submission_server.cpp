@@ -25,7 +25,7 @@ SubmissionServer::SubmissionServer(
         .domain = get_hostname(),
         .selector = "jams",
         .priv_key_path = "/etc/jams/tls/key.pem"
-    }), conn_id_(conn_id), remote_ip_(remote_ip), loop_(loop), sasl_(store), aliases_(aliases) {
+    }), conn_id_(conn_id), remote_ip_(remote_ip), loop_(loop), sasl_(store, remote_ip), aliases_(aliases) {
     reply(220, get_hostname() + " ESMTP submission");
 }
 

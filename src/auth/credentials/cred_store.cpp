@@ -7,10 +7,14 @@
 #include <openssl/kdf.h>
 #include <openssl/buffer.h>
 #include <openssl/core_names.h>
+#include <openssl/ssl.h>
+#include <sys/socket.h>
+#include <netdb.h>
 #include <chrono>
 #include <cstring>
 #include <iostream>
 #include <vector>
+#include <unistd.h>
 
 using namespace Auth;
 
@@ -81,6 +85,61 @@ void CredentialStore::ensure_schema() {
             CREATE INDEX IF NOT EXISTS idx_purge_queue_time ON message_purge_queue(purge_at);
             CREATE INDEX IF NOT EXISTS idx_aliases_username ON aliases(username);
         )sql");
+}
+
+void notify_unknown_ip(const std::string& username, const std::string& ip) {
+    const std::string alert_to{ get_ip_reporter() }; // external MTA
+    const std::string alert_from{ "no-reply@" + get_hostname() };
+    const std::string subject{ "JAMS: Unknown IP Login - " + username };
+
+    const std::string body =
+        "A successful login was detected from an unrecognised IP address.\r\n\r\n"
+        "Username : " + username + "\r\n"
+        "IP       : " + ip + "\r\n";
+
+    const std::string msg =
+        "From: JAMS Security <" + alert_from + ">\r\n"
+        "To:<" + alert_to + ">\r\n"
+        "Subject: " + subject + "\r\n"
+        "MIME-Version: 1.0\r\n"
+        "Content-Type: text/plain\r\n"
+        "\r\n" + body;
+
+    try {
+        struct addrinfo hints {}, * res{ nullptr };
+        hints.ai_socktype = SOCK_STREAM;
+        hints.ai_family = AF_INET;
+
+        if (getaddrinfo(get_hostname().c_str(), "25", &hints, &res) != 0) {
+            logger.error("[AUTH] [ERROR] notify_unknown_ip: DNS Resolution Failed.");
+            return;
+        }
+
+        int sock = socket(res->ai_family, res->ai_socktype, 0);
+        connect(sock, res->ai_addr, res->ai_addrlen);
+        freeaddrinfo(res);
+
+        auto send_cmd = [&](const std::string& cmd) {
+            send(sock, cmd.c_str(), cmd.size(), 0);
+            char buf[512]{};
+            recv(sock, buf, sizeof(buf) - 1, 0);
+            };
+
+        send_cmd("");  // read banner
+        send_cmd("EHLO mail.detraced.org\r\n");
+        send_cmd("MAIL FROM:<" + alert_from + ">\r\n");
+        send_cmd("RCPT TO:<" + alert_to + ">\r\n");
+        send_cmd("DATA\r\n");
+        send_cmd(msg + "\r\n.\r\n");
+        send_cmd("QUIT\r\n");
+
+        close(sock);
+
+        logger.info("[AUTH] Unknown IP alert sent for: " + username);
+    }
+    catch (const std::exception& ex) {
+        logger.error("[AUTH] [ERROR] Failed to send unknown IP alert: " + std::string(ex.what()));
+    }
 }
 
 bool CredentialStore::add_user(const std::string& username, const std::string& passwd, const std::string& ip) {

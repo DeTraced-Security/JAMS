@@ -32,6 +32,17 @@ inline std::string get_hostname() {
     return result;
 };
 
+inline std::string get_ip_reporter() {
+    std::string result{};
+    for (auto& addr : configs) {
+        if (addr.first == "ip_alert_mta") {
+            result = addr.second;
+        }
+    }
+
+    return result;
+}
+
 inline std::string get_mailroot() {
     std::string result{};
     for (auto& root : configs) {
