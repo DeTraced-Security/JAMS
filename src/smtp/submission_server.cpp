@@ -654,16 +654,6 @@ bool SubmissionServer::relay_outbound(
         mx_host = domain;
     }
 
-    logger.info("[RELAY] envelope MAIL FROM = <" + from + ">");
-    logger.info("[RELAY] envelope RCPT TO   = <" + to + ">");
-
-    logger.debug("[RELAY] MX For: " + domain + " -> " + mx_host + " (prio=" + std::to_string(mx_prio) + ")");
-
-    logger.debug("[RELAY] body separator search on " + std::to_string(body.size()) + " bytes: " +
-        (body.find("\r\n\r\n") != std::string::npos ? "found \\r\\n\\r\\n" :
-            body.find("\n\n") != std::string::npos ? "found \\n\\n (no CRLF!)" :
-            "NO SEPARATOR FOUND"));
-
     struct addrinfo hints {}, * res = nullptr;
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;

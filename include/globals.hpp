@@ -14,13 +14,15 @@ inline std::string resolve_path(const char* env, const char* fallback) {
     return fallback;
 }
 
-inline Utils::TOMLParser load_configs{resolve_path("JAMS_CONFIG", "../config/server.toml")};
+inline bool logs_enabled;
+
+inline Utils::TOMLParser load_configs{ resolve_path("JAMS_CONFIG", "../config/server.toml") };
 inline const auto configs = load_configs.fetch_configs();
-inline Utils::Logger logger{resolve_path("JAMS_LOG_PATH", "../logs/jams.txt")};
+inline Utils::Logger logger{ resolve_path("JAMS_LOG_PATH", "../logs/jams.txt"), logs_enabled };
 
 inline std::string get_hostname() {
     std::string result{};
-    
+
     for (auto& host : configs) {
         if (host.first == "hostname") {
             result = host.second;

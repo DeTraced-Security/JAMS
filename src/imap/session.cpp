@@ -1325,7 +1325,6 @@ std::vector<uint32_t> Session::parse_sequence_set(
 }
 
 void Session::send(const std::string& line) {
-    logger.info("[IMAP] " + std::to_string(conn_id_) + " > " + line);
     std::string out = line + "\r\n";
 
     loop_.submit_write(conn_id_, std::vector<uint8_t>(out.begin(), out.end()));
