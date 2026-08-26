@@ -25,7 +25,7 @@ SubmissionServer::SubmissionServer(
         .domain = get_hostname(),
         .selector = "jams",
         .priv_key_path = "/etc/jams/tls/key.pem"
-    }), conn_id_(conn_id), remote_ip_(remote_ip), loop_(loop), sasl_(store), aliases_(aliases) {
+    }), conn_id_(conn_id), remote_ip_(remote_ip), loop_(loop), sasl_(store, remote_ip), aliases_(aliases) {
     reply(220, get_hostname() + " ESMTP submission");
 }
 
@@ -398,18 +398,19 @@ void SubmissionServer::cmd_rcpt(std::string_view arg) {
     }
 
     auto at = addr.find('@');
-    std::string domain = (at != std::string::npos) ? addr.substr(at + 1) : "";
+    const std::string domain = (at != std::string::npos) ? addr.substr(at + 1) : "";
+    std::string domain_lower = domain;
+    std::transform(domain_lower.begin(), domain_lower.end(), domain_lower.begin(), ::tolower);
 
-    std::transform(domain.begin(), domain.end(), domain.begin(), ::tolower);
-
-    if (!Storage::MailDir::is_safe(domain)) {
+    if (!Storage::MailDir::is_safe(domain_lower)) {
         reply(550, "Mailbox unavailable");
         return;
     }
 
-    // if (domain != get_hostname()) {
-    //     reply(500, "5.7.1 Relaying denied");
-    // }
+    if (domain != get_hostname()) {
+        reply(550, "5.7.1 Relaying denied");
+        return;
+    }
 
     std::string resolved = aliases_.resolve(addr);
     bool is_alias = (resolved != addr);
@@ -535,7 +536,7 @@ bool SubmissionServer::deliver() {
                 continue;
             }
 
-            Storage::MailDir mdir(get_mailroot() + mailbox_user);
+            Storage::MailDir mdir(target_path);
             auto stored_path = mdir.deliver(env_.mail_from, rcpt, env_.body);
 
             if (!stored_path) {
@@ -652,16 +653,6 @@ bool SubmissionServer::relay_outbound(
     if (mx_host.empty()) {
         mx_host = domain;
     }
-
-    logger.info("[RELAY] envelope MAIL FROM = <" + from + ">");
-    logger.info("[RELAY] envelope RCPT TO   = <" + to + ">");
-
-    logger.debug("[RELAY] MX For: " + domain + " -> " + mx_host + " (prio=" + std::to_string(mx_prio) + ")");
-
-    logger.debug("[RELAY] body separator search on " + std::to_string(body.size()) + " bytes: " +
-        (body.find("\r\n\r\n") != std::string::npos ? "found \\r\\n\\r\\n" :
-            body.find("\n\n") != std::string::npos ? "found \\n\\n (no CRLF!)" :
-            "NO SEPARATOR FOUND"));
 
     struct addrinfo hints {}, * res = nullptr;
     hints.ai_family = AF_INET;
@@ -846,7 +837,7 @@ bool SubmissionServer::relay_outbound(
             ehlo_caps.begin(), ehlo_caps.end(),
             [](const std::string& line) {
                 std::string upper = line;
-                std::transform(upper.begin(), upper.end(), upper.begin(), ::tolower);
+                std::transform(upper.begin(), upper.end(), upper.begin(), ::toupper);
 
                 return upper.find("STARTTLS") != std::string::npos;
             }
@@ -929,6 +920,8 @@ bool SubmissionServer::relay_outbound(
             logger.debug("[RELAY] Outbound headers:\n" + msg_headers);
             outbound = dkim_signer_.sign(msg_headers, msg_body);
             logger.debug("[RELAY] Signed message:\n" + outbound);
+
+            outbound += "\r\n" + msg_body;
         }
         catch (const std::exception& e) {
             logger.error("[OUTBOUND_RELAY] DKIM Signing failed: " + std::string(e.what()));
@@ -958,7 +951,7 @@ bool SubmissionServer::relay_outbound(
 
     send_line("QUIT");
     expect(221);
-    ::close(sock);
+    close_conn();
 
     logger.debug("[RELAY] Delivery to " + to + std::string(ok ? "succeeded" : "failed"));
     return ok;

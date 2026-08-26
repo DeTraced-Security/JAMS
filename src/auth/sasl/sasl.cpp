@@ -8,7 +8,7 @@
 
 using namespace Auth;
 
-SASLSession::SASLSession(CredentialStore& store) : store_(store) {}
+SASLSession::SASLSession(CredentialStore& store, const std::string& ip) : store_(store), ip_(ip) {}
 
 SASLSession::Response SASLSession::begin(
     const std::string& mechanism, const std::string& response
@@ -111,7 +111,7 @@ SASLSession::Response SASLSession::process_plain(const std::string& b64) {
 
     logger.info("[SASL] PLAIN auth attempt for user: " + authcid);
 
-    if (store_.verify(authcid, passwd)) {
+    if (store_.verify(authcid, passwd, ip_)) {
         username_ = authcid;
         return auth_success();
     }
@@ -145,7 +145,7 @@ SASLSession::Response SASLSession::process_login(const std::string& b64) {
 
         logger.info("[SASL] LOGIN auth attempt for user: " + pending_username_);
 
-        if (store_.verify(pending_username_, password)) {
+        if (store_.verify(pending_username_, password, ip_)) {
             username_ = pending_username_;
             pending_username_.clear();
             return auth_success();

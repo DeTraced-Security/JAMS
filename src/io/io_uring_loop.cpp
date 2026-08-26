@@ -360,7 +360,7 @@ void Async::IoUringLoop::on_read(uint64_t conn_id, int res) {
 }
 
 void Async::IoUringLoop::on_write(uint64_t conn_id, int res) {
-    logger.error("[ON_WRITE] conn=" + std::to_string(conn_id) + " res=" + std::to_string(res));
+    logger.debug("[ON_WRITE] conn=" + std::to_string(conn_id) + " res=" + std::to_string(res));
     auto bit = buffers_.find(conn_id);
     if (bit == buffers_.end()) {
         return;

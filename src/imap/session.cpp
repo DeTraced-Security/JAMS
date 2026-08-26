@@ -25,6 +25,17 @@ mail_root_(mail_root) {
     untagged("OK [CAPABILITY IMAP4rev1 STARTTLS AUTH=PLAIN IDLE] JAMS IMAP server ready");
 }
 
+std::string Session::message_path(const MessageMeta& msg) const {
+    std::string dir = msg.in_cur ? "/cur/" : "/new/";
+    std::string base = mail_root_ + "/" + username_;
+
+    if (selected_mailbox_ != "INBOX") {
+        base += "/." + selected_mailbox_;
+    }
+
+    return base + dir + msg.filename;
+}
+
 void Session::on_data(std::span<const uint8_t> bytes) {
     size_t offset = 0;
 
@@ -452,12 +463,13 @@ void Session::complete_append() {
 
     fname += ":2," + flag_chars;
 
+
+    ensure_mailbox_dirs(append_mailbox_);
+
     std::string base = mail_root_ + "/" + username_;
     if (append_mailbox_ != "INBOX") {
         base += "/." + append_mailbox_;
     }
-
-    ensure_mailbox_dirs(base);
 
     std::string path = base + "/cur/" + fname;
     std::ofstream out(path, std::ios::binary);
@@ -528,7 +540,7 @@ void Session::cmd_login(const std::string& tag, const std::string& args) {
         return;
     }
 
-    if (!cred_store_.verify(user, pass)) {
+    if (!cred_store_.verify(user, pass, remote_ip_)) {
         no(tag, "[AUTHENTICATIONFAILED] Invalid credentials");
         return;
     }
@@ -802,11 +814,17 @@ std::string Session::fetch_message(
 
 std::vector<uint8_t> Session::read_blob(const MessageMeta& msg) const {
     std::string dir = msg.in_cur ? "/cur/" : "/new/";
-    std::string path = mail_root_ + "/" + username_ + dir + msg.filename;
+    std::string base = mail_root_ + "/" + username_;
 
+    if (selected_mailbox_ != "INBOX") {
+        base += "/." + selected_mailbox_;
+    }
+
+    std::string path = base + dir + msg.filename;
     std::ifstream file(path, std::ios::binary);
+
     if (!file) {
-        logger.error("[IMAP] Failed to open path: " + path);
+        logger.error("[IMAP] Failed to open path: " + path + " errno=" + std::to_string(errno) + " (" + std::strerror(errno) + ")");
         return {};
     }
 
@@ -911,8 +929,11 @@ void Session::cmd_store(const std::string& tag, const std::string& args) {
             std::string new_name = base + ":2," + flag_chars(itr->flags);
             if (new_name != itr->filename) {
                 std::string dir = itr->in_cur ? "/cur/" : "/new/";
-                std::string old_path = mail_root_ + "/" + username_ + dir + itr->filename;
-                std::string new_path = mail_root_ + "/" + username_ + dir + new_name;
+                std::string old_path = message_path(*itr);
+
+                MessageMeta renamed = *itr;
+                renamed.filename = new_name;
+                std::string new_path = message_path(renamed);
 
                 if (::rename(old_path.c_str(), new_path.c_str()) == 0) {
                     itr->filename = new_name;
@@ -943,10 +964,13 @@ void Session::cmd_expunge(const std::string& tag) {
 
         if (msg.flags.find("\\Deleted") != std::string::npos) {
             // Delete the file!
-            std::string dir = msg.in_cur ? "/cur/" : "/new/";
-            std::string path = mail_root_ + "/" + username_ + dir + msg.filename;
+            std::string path = message_path(msg);
 
-            ::unlink(path.c_str());
+            if (::unlink(path.c_str()) != 0) {
+                logger.error("[IMAP] EXPUNGE unlink failed: "
+                    + path + " errno=" + std::to_string(errno)
+                    + " (" + std::strerror(errno) + ")");
+            }
             untagged(std::to_string(seq) + " EXPUNGE");
             --seq;
         }
@@ -975,10 +999,13 @@ void Session::cmd_close(const std::string& tag) {
     if (!read_only_) {
         for (auto& msg : messages_) {
             if (msg.flags.find("\\Deleted") != std::string::npos) {
-                std::string dir = msg.in_cur ? "/cur/" : "/new/";
-                std::string path = mail_root_ + username_ + dir + msg.filename;
+                std::string path = message_path(msg);
 
-                ::unlink(path.c_str());
+                if (::unlink(path.c_str()) != 0) {
+                    logger.error("[IMAP] CLOSE unlink failed: "
+                        + path + " errno=" + std::to_string(errno)
+                        + " (" + std::strerror(errno) + ")");
+                }
             }
         }
     }
@@ -1045,7 +1072,7 @@ void Session::complete_plain_auth(const std::string& tag, const std::string& b64
     auto at = user.find('@');
     if (at != std::string::npos) user = user.substr(0, at);
 
-    if (!cred_store_.verify(user, pass)) {
+    if (!cred_store_.verify(user, pass, remote_ip_)) {
         no(tag, "[AUTHENTICATIONFAILED] Invalid credentials");
         return;
     }
@@ -1298,7 +1325,6 @@ std::vector<uint32_t> Session::parse_sequence_set(
 }
 
 void Session::send(const std::string& line) {
-    logger.info("[IMAP] " + std::to_string(conn_id_) + " > " + line);
     std::string out = line + "\r\n";
 
     loop_.submit_write(conn_id_, std::vector<uint8_t>(out.begin(), out.end()));

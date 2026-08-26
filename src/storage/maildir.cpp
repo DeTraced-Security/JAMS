@@ -17,22 +17,25 @@ MailDir::MailDir(std::string base_path) : base_(std::move(base_path)) {};
 bool MailDir::ensure_dirs() {
     namespace fs = std::filesystem;
 
+    logger.debug("[MAILDIR] ensure_dirs() base_ = '" + base_.string() + "' absolute = '" + fs::absolute(base_).string() + "'");
+
     std::error_code ec;
     for (const char* sub : { ".Sent", ".Trash" }) {
-        fs::create_directories((base_ / sub), ec);
-        logger.debug("[MAILDIR] Creating " + std::string(base_ / sub) + " directory");
+        auto full = base_ / sub;
+        logger.debug("[MAILDIR] creating: " + full.string());
+        fs::create_directories(full, ec);
         if (ec) {
-            logger.debug("[MAILDIR] create_directories(" + std::string((base_ / sub)) + "): " + ec.message());
-
+            logger.debug("[MAILDIR] create_directories(" + full.string() + "): " + ec.message());
             return false;
         }
     }
 
     for (const char* sub : { "tmp", "new", "cur" }) {
-        fs::create_directories((base_ / sub), ec);
+        auto full = base_ / sub;
+        logger.debug("[MAILDIR] creating: " + full.string());
+        fs::create_directories(full, ec);
         if (ec) {
-            logger.debug("[MAILDIR] create_directories(" + std::string((base_ / sub)) + "): " + ec.message());
-
+            logger.debug("[MAILDIR] create_directories(" + full.string() + "): " + ec.message());
             return false;
         }
     }
@@ -45,11 +48,6 @@ std::optional<std::string> MailDir::deliver(
     const std::string& rcpt_to,
     const std::string& body
 ) {
-    // Check to prevent `/var/mail/vhost{username}/...
-    if (!base_.filename().string().ends_with("/")) {
-        base_ = base_.append("/");
-    }
-
     bool ensured_dirs = ensure_dirs();
 
     if (!ensured_dirs) {
@@ -102,6 +100,10 @@ std::optional<std::string> MailDir::deliver(
     // Atomically move to new/
     auto new_path = base_ / "new" / fname;
     std::error_code ec;
+
+    logger.debug("[MAILDIR] tmp_path = " + tmp_path.string());
+    logger.debug("[MAILDIR] new_path = " + new_path.string());
+
     std::filesystem::rename(tmp_path, new_path, ec);
 
     if (ec) {

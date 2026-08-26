@@ -4,11 +4,17 @@
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 #include <openssl/bio.h>
+#include <openssl/kdf.h>
 #include <openssl/buffer.h>
+#include <openssl/core_names.h>
+#include <openssl/ssl.h>
+#include <sys/socket.h>
+#include <netdb.h>
 #include <chrono>
 #include <cstring>
 #include <iostream>
 #include <vector>
+#include <unistd.h>
 
 using namespace Auth;
 
@@ -45,7 +51,8 @@ void CredentialStore::ensure_schema() {
                 salt TEXT NOT NULL,
                 iterations INTEGER NOT NULL DEFAULT 100000,
                 active INTEGER NOT NULL DEFAULT 1,
-                created_at INTEGER NOT NULL
+                created_at INTEGER NOT NULL,
+                last_known_ip TEXT
             );
 
             CREATE TABLE IF NOT EXISTS aliases (
@@ -80,7 +87,62 @@ void CredentialStore::ensure_schema() {
         )sql");
 }
 
-bool CredentialStore::add_user(const std::string& username, const std::string& passwd) {
+void notify_unknown_ip(const std::string& username, const std::string& ip) {
+    const std::string alert_to{ get_ip_reporter() }; // external MTA
+    const std::string alert_from{ "no-reply@" + get_hostname() };
+    const std::string subject{ "JAMS: Unknown IP Login - " + username };
+
+    const std::string body =
+        "A successful login was detected from an unrecognised IP address.\r\n\r\n"
+        "Username : " + username + "\r\n"
+        "IP       : " + ip + "\r\n";
+
+    const std::string msg =
+        "From: JAMS Security <" + alert_from + ">\r\n"
+        "To:<" + alert_to + ">\r\n"
+        "Subject: " + subject + "\r\n"
+        "MIME-Version: 1.0\r\n"
+        "Content-Type: text/plain\r\n"
+        "\r\n" + body;
+
+    try {
+        struct addrinfo hints {}, * res{ nullptr };
+        hints.ai_socktype = SOCK_STREAM;
+        hints.ai_family = AF_INET;
+
+        if (getaddrinfo(get_hostname().c_str(), "25", &hints, &res) != 0) {
+            logger.error("[AUTH] [ERROR] notify_unknown_ip: DNS Resolution Failed.");
+            return;
+        }
+
+        int sock = socket(res->ai_family, res->ai_socktype, 0);
+        connect(sock, res->ai_addr, res->ai_addrlen);
+        freeaddrinfo(res);
+
+        auto send_cmd = [&](const std::string& cmd) {
+            send(sock, cmd.c_str(), cmd.size(), 0);
+            char buf[512]{};
+            recv(sock, buf, sizeof(buf) - 1, 0);
+            };
+
+        send_cmd("");  // read banner
+        send_cmd("EHLO mail.detraced.org\r\n");
+        send_cmd("MAIL FROM:<" + alert_from + ">\r\n");
+        send_cmd("RCPT TO:<" + alert_to + ">\r\n");
+        send_cmd("DATA\r\n");
+        send_cmd(msg + "\r\n.\r\n");
+        send_cmd("QUIT\r\n");
+
+        close(sock);
+
+        logger.info("[AUTH] Unknown IP alert sent for: " + username);
+    }
+    catch (const std::exception& ex) {
+        logger.error("[AUTH] [ERROR] Failed to send unknown IP alert: " + std::string(ex.what()));
+    }
+}
+
+bool CredentialStore::add_user(const std::string& username, const std::string& passwd, const std::string& ip) {
     if (username.empty() || passwd.empty()) {
         return false;
     }
@@ -94,11 +156,13 @@ bool CredentialStore::add_user(const std::string& username, const std::string& p
         std::chrono::system_clock::now().time_since_epoch()
     ).count();
 
+    auto hashed_ip = hash_data(ip);
+
     // SQLite Statement
     sqlite3_stmt* stmt = nullptr;
     const char* sql =
-        "INSERT INTO users (username, hash, salt, iterations, active, created_at) "
-        "VALUES (?, ?, ?, ?, 1, ?)";
+        "INSERT INTO users (username, hash, salt, iterations, active, created_at, last_known_ip) "
+        "VALUES (?, ?, ?, ?, 1, ?, ?)";
 
     // Prepare the statement
     if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
@@ -111,6 +175,7 @@ bool CredentialStore::add_user(const std::string& username, const std::string& p
     sqlite3_bind_text(stmt, 3, hashed.salt.c_str(), -1, SQLITE_STATIC);
     sqlite3_bind_int(stmt, 4, hashed.iterations);
     sqlite3_bind_int64(stmt, 5, static_cast<sqlite3_int64>(now));
+    sqlite3_bind_text(stmt, 6, hashed_ip.hash.c_str(), -1, SQLITE_STATIC);
 
     bool ok = (sqlite3_step(stmt) == SQLITE_DONE);
     sqlite3_finalize(stmt); // Construct the statement with the binds
@@ -125,13 +190,13 @@ bool CredentialStore::add_user(const std::string& username, const std::string& p
     return ok;
 }
 
-bool CredentialStore::verify(const std::string& username, const std::string& passwd) {
+bool CredentialStore::verify(const std::string& username, const std::string& passwd, const std::string& ip) {
     if (username.empty() || passwd.empty()) {
         return false;
     }
 
     sqlite3_stmt* stmt = nullptr;
-    const char* sql = "SELECT hash, salt, iterations FROM users "
+    const char* sql = "SELECT hash, salt, iterations, last_known_ip FROM users "
         "WHERE username = ? AND active = 1";
 
     if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
@@ -141,28 +206,38 @@ bool CredentialStore::verify(const std::string& username, const std::string& pas
 
     sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
 
+    auto hashed_ip = hash_data(ip);
+    bool unknown_ip{ false };
+
     bool user_found = false;
     std::string stored_hash, salt;
     int iterations = 100000;
 
     if (sqlite3_step(stmt) == SQLITE_ROW) {
-        user_found = user_exists(username);
-
         const char* hash_cstr = reinterpret_cast<const char*>(
             sqlite3_column_text(stmt, 0)
             );
         const char* salt_cstr = reinterpret_cast<const char*>(
             sqlite3_column_text(stmt, 1)
             );
-
+        const char* ip_cstr = reinterpret_cast<const char*>(
+            sqlite3_column_text(stmt, 3)
+            );
         // Safe-guard against potential NULL values that may crash the call
         if (!hash_cstr || !salt_cstr) {
             sqlite3_finalize(stmt);
             return false;
         }
+
+        if (std::string(ip_cstr) != hashed_ip.hash) {
+            unknown_ip = true;
+        }
+
         stored_hash = hash_cstr;
         salt = salt_cstr;
         iterations = sqlite3_column_int(stmt, 2);
+
+        user_found = true;
     }
 
     sqlite3_finalize(stmt);
@@ -173,11 +248,17 @@ bool CredentialStore::verify(const std::string& username, const std::string& pas
         iterations
     );
 
+    const bool auth_ok = constant_time_eq(computed, stored_hash);
+
     if (!user_found) {
         return false;
     }
 
-    return constant_time_eq(computed, stored_hash);
+    if (unknown_ip && auth_ok) {
+        // TODO: Send to external MTA
+    }
+
+    return auth_ok;
 }
 
 bool CredentialStore::deactivate_user(const std::string& username) {
@@ -265,8 +346,76 @@ bool CredentialStore::change_password(
     return ok && sqlite3_changes(db_) > 0;
 }
 
+std::string CredentialStore::derive_salt(const std::string& data) {
+    const char* pepper = std::getenv("JAMS_PEPPER");
+    if (!pepper) {
+        throw std::runtime_error("[CRED] [FATAL] JAMS_PEPPER not set!");
+    }
+
+    unsigned char salt_byte[16];
+
+    EVP_KDF* kdf = EVP_KDF_fetch(nullptr, "HKDF", nullptr);
+    EVP_KDF_CTX* ctx = EVP_KDF_CTX_new(kdf);
+    EVP_KDF_free(kdf);
+
+    OSSL_PARAM params[] = {
+        OSSL_PARAM_construct_utf8_string(OSSL_KDF_PARAM_DIGEST, (char*)"SHA512", 0),
+        OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_KEY, (void*)pepper, strlen(pepper)),
+        OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_SALT, (void*)data.c_str(), data.size()),
+        OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_INFO, (void*)"jams-salt", 9),
+        OSSL_PARAM_construct_end()
+    };
+
+    if (EVP_KDF_derive(ctx, salt_byte, sizeof(salt_byte), params) != 1) {
+        EVP_KDF_CTX_free(ctx);
+        throw std::runtime_error("[CRED] [FATAL] HKDF derivation failed!");
+    }
+
+    EVP_KDF_CTX_free(ctx);
+
+    std::ostringstream stream;
+    for (unsigned char b : salt_byte) {
+        stream << std::hex << std::setw(2) << std::setfill('0') << (int)b;
+    }
+
+    return stream.str();
+}
+
+CredentialStore::HashedPassword CredentialStore::hash_data(const std::string& data) {
+    HashedPassword hashed;
+    hashed.salt = "";
+    hashed.iterations = 100000;
+
+    std::string derived_salt = derive_salt(data);
+    unsigned char salt_bytes[16];
+    for (size_t i = 0; i < 16; i++) {
+        salt_bytes[i] = std::stoi(derived_salt.substr(i * 2, 2), nullptr, 16);
+    }
+
+    unsigned char hash_bytes[64];
+    PKCS5_PBKDF2_HMAC(
+        data.c_str(),
+        data.size(),
+        salt_bytes,
+        sizeof(salt_bytes),
+        hashed.iterations,
+        EVP_sha512(),
+        sizeof(hash_bytes),
+        hash_bytes
+    );
+
+    std::ostringstream stream;
+    for (unsigned char b : hash_bytes) {
+        stream << std::hex << std::setw(2) << std::setfill('0') << (int)b;
+    }
+
+    hashed.hash = stream.str();
+    return hashed;
+}
+
 CredentialStore::HashedPassword CredentialStore::hash_password(const std::string& password, const std::string& salt, int iterations) {
     HashedPassword hashed;
+
     hashed.salt = salt;
     hashed.iterations = iterations;
     hashed.hash = pbkdf2(password, hashed.salt, hashed.iterations);
