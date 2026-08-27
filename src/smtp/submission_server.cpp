@@ -352,6 +352,14 @@ void SubmissionServer::cmd_mail(std::string_view arg) {
         return;
     }
 
+    auto addr = std::string(extract_address(arg.substr(5)));
+    auto at = addr.find('@');
+    const std::string domain = (at != std::string::npos) ? addr.substr(at + 1) : "";
+
+    std::string domain_lower = domain;
+    std::transform(domain_lower.begin(), domain_lower.end(), domain_lower.begin(), ::tolower);
+
+
     std::string upper(arg);
     for (char& c : upper) {
         c = static_cast<char>(std::toupper(c));
@@ -359,22 +367,6 @@ void SubmissionServer::cmd_mail(std::string_view arg) {
 
     if (upper.substr(0, 5) != "FROM:") {
         reply(501, "Syntax: MAIL FROM:<address>");
-        return;
-    }
-
-    auto addr = std::string(extract_address(arg.substr(5)));
-    if (addr.empty()) {
-        reply(501, "Empty MAIL FROM:<...>");
-        return;
-    }
-
-    auto at = addr.find('@');
-    const std::string domain = (at != std::string::npos) ? addr.substr(at + 1) : "";
-    std::string domain_lower = domain;
-    std::transform(domain_lower.begin(), domain_lower.end(), domain_lower.begin(), ::tolower);
-
-    if (domain_lower != get_hostname()) {
-        reply(550, "5.7.1 Relaying Denied.");
         return;
     }
 
@@ -406,6 +398,7 @@ void SubmissionServer::cmd_rcpt(std::string_view arg) {
         return;
     }
 
+
     // RFC 5321 4.5.3: max 100
     if (env_.rcpt_to.size() >= 100) {
         reply(452, "Too Many Recipients");
@@ -419,6 +412,11 @@ void SubmissionServer::cmd_rcpt(std::string_view arg) {
 
     if (!Storage::MailDir::is_safe(domain_lower)) {
         reply(550, "Mailbox unavailable");
+        return;
+    }
+
+    if (domain != get_hostname()) {
+        reply(550, "5.7.1 Relaying denied");
         return;
     }
 
