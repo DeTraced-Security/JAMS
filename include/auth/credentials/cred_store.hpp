@@ -84,11 +84,11 @@ namespace Auth {
         /// @brief Hash the password in PBKDF2 SHA-256
         /// @param password 
         /// @return 
-        static HashedPassword hash_password(const std::string& password);
+        static HashedPassword hash_password(const std::string& password, const int itr = 100000);
 
-        static HashedPassword hash_password(const std::string& passwd, const std::string& salt, int interations);
+        static HashedPassword hash_password(const std::string& password, const std::string& username, const int itr = 100000);
 
-        static HashedPassword hash_data(const std::string& data);
+        static HashedPassword hash_data(const std::string& data, const int iter = 100000);
 
         static std::string derive_salt(const std::string& username);
 

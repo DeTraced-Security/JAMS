@@ -48,7 +48,6 @@ void CredentialStore::ensure_schema() {
             CREATE TABLE IF NOT EXISTS users (
                 username TEXT PRIMARY KEY,
                 hash TEXT NOT NULL,
-                salt TEXT NOT NULL,
                 iterations INTEGER NOT NULL DEFAULT 100000,
                 active INTEGER NOT NULL DEFAULT 1,
                 created_at INTEGER NOT NULL,
@@ -93,7 +92,7 @@ void notify_unknown_ip(const std::string& username, const std::string& ip) {
     const std::string subject{ "JAMS: Unknown IP Login - " + username };
 
     const std::string body =
-        "A successful login was detected from an unrecognised IP address.\r\n\r\n"
+        "An attempted login was detected from an unrecognised IP address.\r\n\r\n"
         "Username : " + username + "\r\n"
         "IP       : " + ip + "\r\n";
 
@@ -151,7 +150,7 @@ bool CredentialStore::add_user(const std::string& username, const std::string& p
         return false;
     }
 
-    auto hashed = hash_password(passwd);
+    auto hashed = hash_password(passwd, username);
     auto now = std::chrono::duration_cast<std::chrono::seconds>(
         std::chrono::system_clock::now().time_since_epoch()
     ).count();
@@ -161,8 +160,8 @@ bool CredentialStore::add_user(const std::string& username, const std::string& p
     // SQLite Statement
     sqlite3_stmt* stmt = nullptr;
     const char* sql =
-        "INSERT INTO users (username, hash, salt, iterations, active, created_at, last_known_ip) "
-        "VALUES (?, ?, ?, ?, 1, ?, ?)";
+        "INSERT INTO users (username, hash, iterations, active, created_at, last_known_ip) "
+        "VALUES (?, ?, ?, 1, ?, ?)";
 
     // Prepare the statement
     if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
@@ -172,10 +171,9 @@ bool CredentialStore::add_user(const std::string& username, const std::string& p
     // Bind the values to avoid SQL Injection via concatenation
     sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
     sqlite3_bind_text(stmt, 2, hashed.hash.c_str(), -1, SQLITE_STATIC);
-    sqlite3_bind_text(stmt, 3, hashed.salt.c_str(), -1, SQLITE_STATIC);
-    sqlite3_bind_int(stmt, 4, hashed.iterations);
-    sqlite3_bind_int64(stmt, 5, static_cast<sqlite3_int64>(now));
-    sqlite3_bind_text(stmt, 6, hashed_ip.hash.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 3, hashed.iterations);
+    sqlite3_bind_int64(stmt, 4, static_cast<sqlite3_int64>(now));
+    sqlite3_bind_text(stmt, 5, hashed_ip.hash.c_str(), -1, SQLITE_STATIC);
 
     bool ok = (sqlite3_step(stmt) == SQLITE_DONE);
     sqlite3_finalize(stmt); // Construct the statement with the binds
@@ -196,7 +194,7 @@ bool CredentialStore::verify(const std::string& username, const std::string& pas
     }
 
     sqlite3_stmt* stmt = nullptr;
-    const char* sql = "SELECT hash, salt, iterations, last_known_ip FROM users "
+    const char* sql = "SELECT hash, iterations, last_known_ip FROM users "
         "WHERE username = ? AND active = 1";
 
     if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
@@ -217,14 +215,11 @@ bool CredentialStore::verify(const std::string& username, const std::string& pas
         const char* hash_cstr = reinterpret_cast<const char*>(
             sqlite3_column_text(stmt, 0)
             );
-        const char* salt_cstr = reinterpret_cast<const char*>(
-            sqlite3_column_text(stmt, 1)
-            );
         const char* ip_cstr = reinterpret_cast<const char*>(
             sqlite3_column_text(stmt, 3)
             );
         // Safe-guard against potential NULL values that may crash the call
-        if (!hash_cstr || !salt_cstr) {
+        if (!hash_cstr) {
             sqlite3_finalize(stmt);
             return false;
         }
@@ -233,8 +228,8 @@ bool CredentialStore::verify(const std::string& username, const std::string& pas
             unknown_ip = true;
         }
 
+        salt = derive_salt(username);
         stored_hash = hash_cstr;
-        salt = salt_cstr;
         iterations = sqlite3_column_int(stmt, 2);
 
         user_found = true;
@@ -254,8 +249,8 @@ bool CredentialStore::verify(const std::string& username, const std::string& pas
         return false;
     }
 
-    if (unknown_ip && auth_ok) {
-        // TODO: Send to external MTA
+    if (unknown_ip) {
+        notify_unknown_ip(username, ip);
     }
 
     return auth_ok;
@@ -306,7 +301,7 @@ bool CredentialStore::change_password(
     }
 
     sqlite3_stmt* sel{ nullptr };
-    if (sqlite3_prepare_v2(db_, "SELECT hash, salt, iterations FROM users WHERE username = ?", -1, &sel, nullptr) != SQLITE_OK) {
+    if (sqlite3_prepare_v2(db_, "SELECT hash, iterations FROM users WHERE username = ?", -1, &sel, nullptr) != SQLITE_OK) {
         return false;
     }
 
@@ -318,27 +313,26 @@ bool CredentialStore::change_password(
     }
 
     std::string stored_hash = reinterpret_cast<const char*>(sqlite3_column_text(sel, 0));
-    std::string stored_salt = reinterpret_cast<const char*>(sqlite3_column_text(sel, 1));
-    int stored_iterations = sqlite3_column_int(sel, 2);
+    const std::string stored_salt = derive_salt(username);
+    const int stored_iterations = sqlite3_column_int(sel, 2);
 
     sqlite3_finalize(sel);
 
-    auto check = hash_password(old_passwd, stored_salt, stored_iterations);
+    auto check = hash_password(old_passwd, stored_iterations);
     if (!constant_time_eq(check.hash, stored_hash)) {
         return false;
     }
 
-    auto hashed_new = hash_password(new_passwd);
+    auto hashed_new = hash_password(new_passwd, 100000);
     sqlite3_stmt* upd{ nullptr };
 
-    if (sqlite3_prepare_v2(db_, "UPDATE users SET hash = ?, salt = ?, iterations = ? WHERE username = ?", -1, &upd, nullptr) != SQLITE_OK) {
+    if (sqlite3_prepare_v2(db_, "UPDATE users SET hash = ?, iterations = ? WHERE username = ?", -1, &upd, nullptr) != SQLITE_OK) {
         return false;
     }
 
     sqlite3_bind_text(upd, 1, hashed_new.hash.c_str(), -1, SQLITE_STATIC);
-    sqlite3_bind_text(upd, 2, hashed_new.salt.c_str(), -1, SQLITE_STATIC);
-    sqlite3_bind_int(upd, 3, hashed_new.iterations);
-    sqlite3_bind_text(upd, 4, username.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_int(upd, 2, hashed_new.iterations);
+    sqlite3_bind_text(upd, 3, username.c_str(), -1, SQLITE_STATIC);
 
     bool ok = (sqlite3_step(upd) == SQLITE_DONE);
     sqlite3_finalize(upd);
@@ -381,10 +375,10 @@ std::string CredentialStore::derive_salt(const std::string& data) {
     return stream.str();
 }
 
-CredentialStore::HashedPassword CredentialStore::hash_data(const std::string& data) {
+CredentialStore::HashedPassword CredentialStore::hash_data(const std::string& data, const int iterations) {
     HashedPassword hashed;
     hashed.salt = "";
-    hashed.iterations = 100000;
+    hashed.iterations = iterations ? iterations : 100000;
 
     std::string derived_salt = derive_salt(data);
     unsigned char salt_bytes[16];
@@ -413,12 +407,8 @@ CredentialStore::HashedPassword CredentialStore::hash_data(const std::string& da
     return hashed;
 }
 
-CredentialStore::HashedPassword CredentialStore::hash_password(const std::string& password, const std::string& salt, int iterations) {
-    HashedPassword hashed;
-
-    hashed.salt = salt;
-    hashed.iterations = iterations;
-    hashed.hash = pbkdf2(password, hashed.salt, hashed.iterations);
+CredentialStore::HashedPassword CredentialStore::hash_password(const std::string& password, const int iterations) {
+    HashedPassword hashed = hash_data(password, iterations);
 
     return hashed;
 }
@@ -442,33 +432,34 @@ bool CredentialStore::user_exists(const std::string& username) {
 }
 
 CredentialStore::HashedPassword CredentialStore::hash_password(
-    const std::string& passwd
+    const std::string& passwd, const std::string& username, const int itr
 ) {
-    // Generate 16 random bytes for the salt
-    uint8_t salt_bytes[16];
-    if (RAND_bytes(salt_bytes, sizeof(salt_bytes)) != 1) {
-        logger.error("[FATAL] [AUTH] RAND_bytes failed");
-        throw std::runtime_error("[auth/CredStore] RAND_bytes failed");
-    }
-
     HashedPassword hashed;
-    hashed.salt = base64_encode(salt_bytes, sizeof(salt_bytes));
-    hashed.iterations = 100000;
-    hashed.hash = pbkdf2(passwd, hashed.salt, hashed.iterations);
+    const std::string salt = derive_salt(username);
+
+    hashed.salt = "";
+    hashed.iterations = itr ? itr : 100000;
+    hashed.hash = pbkdf2(passwd, salt, hashed.iterations);
 
     return hashed;
 }
 
 std::string CredentialStore::pbkdf2(
-    const std::string& passwd, const std::string& salt_b64,
+    const std::string& passwd, const std::string& salt_hex,
     int iterations
 ) {
-    auto salt = base64_decode(salt_b64);
+    uint8_t salt_bytes[16];
+    for (size_t i = 0; i < 16; i++) {
+        salt_bytes[i] = static_cast<uint8_t>(
+            std::stoi(salt_hex.substr(i * 2, 2), nullptr, 16)
+            );
+    }
+
     uint8_t out[32]; // SHA-256 output in 32 bytes
 
     int rc = PKCS5_PBKDF2_HMAC(
         passwd.c_str(), static_cast<int>(passwd.size()),
-        salt.data(), static_cast<int>(salt.size()),
+        salt_bytes, sizeof(salt_bytes),
         iterations, EVP_sha256(), sizeof(out), out
     );
 
