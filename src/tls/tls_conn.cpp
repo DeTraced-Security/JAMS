@@ -13,8 +13,8 @@ using namespace TLS;
 
 Connection::Connection(SSL* ssl, PlaintextCB on_plaintext) : ssl_(ssl), on_plaintext_(on_plaintext)
 {
-    rbio_ = BIO_new(BIO_s_mem());
-    wbio_ = BIO_new(BIO_s_mem());
+    rbio_ = SSL_get_rbio(ssl_);
+    wbio_ = SSL_get_wbio(ssl_);
 
     if (!rbio_ || !wbio_)
     {

@@ -64,6 +64,11 @@ void Session::on_data(std::span<const uint8_t> bytes) {
             process_line(line_buf_);
             line_buf_.clear();
 
+            if (tls_upgrade_pending_) {
+                tls_upgrade_pending_ = false;
+                return;
+            }
+
             // Drain any literal bytes that arrived in the same call
             if (literal_pending_ && literal_remaining_ > 0) {
                 size_t avail = bytes.size() - (i + 1);
@@ -285,8 +290,13 @@ void Session::cmd_logout(const std::string& tag) {
 }
 
 void Session::cmd_starttls(const std::string& tag) {
-    ok(tag, "Begin TLS negotiation");
+    if (tls_upgrade_pending_) {
+        bad(tag, "TLS already pending");
+        return;
+    }
 
+    ok(tag, "Begin TLS negotiation");
+    tls_upgrade_pending_ = true;
     loop_.upgrade_tls(conn_id_);
 }
 

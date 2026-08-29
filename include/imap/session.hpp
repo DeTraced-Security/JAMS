@@ -67,7 +67,17 @@ namespace IMAP {
             return state_ == State::Logout;
         }
 
+        bool wants_tls_upgrade() const override {
+            return tls_upgrade_pending_;
+        }
+
+        void clear_tls_upgrade() override {
+            tls_upgrade_pending_ = false;
+        }
+
     private:
+        bool tls_upgrade_pending_{ false };
+
         std::string message_path(const MessageMeta& msg) const;
 
         void process_line(const std::string& line);

@@ -287,6 +287,11 @@ void SubmissionServer::cmd_ehlo(std::string_view arg) {
 }
 
 void SubmissionServer::cmd_starttls() {
+    if (tls_upgrade_pending_) {
+        reply(503, "TLS already pending");
+        return;
+    }
+
     if (loop_.is_tls_active(conn_id_)) {
         reply(503, "TLS Already Active");
         return;

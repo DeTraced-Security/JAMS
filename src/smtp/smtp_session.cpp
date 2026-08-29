@@ -280,6 +280,16 @@ void Session::cmd_starttls() {
         return;
     }
 
+    if (tls_upgrade_pending_) {
+        reply_code(503, "TLS already pending");
+        return;
+    }
+
+    if (loop_.is_tls_active(conn_id_)) {
+        reply_code(503, "TLS Already Active");
+        return;
+    }
+
     // RFC 3207: send 220 then upgrade
     // after HELO, no more SMTP until TLS is started
     reply_code(220, "Ready to start TLS");
