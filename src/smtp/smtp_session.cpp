@@ -213,7 +213,7 @@ void Session::cmd_rcpt(std::string_view arg) {
 
     // RFC 5321 4.5.3: max 100
     if (env_.rcpt_to.size() >= 100) {
-        reply_code(452, "Too Many Recipients");
+        reply_code(452, "4.5.3 Too Many Recipients");
         return;
     }
 
@@ -277,6 +277,16 @@ void Session::cmd_quit() {
 void Session::cmd_starttls() {
     if (state_ == SMTPState::Data) {
         reply_code(503, "Bad Sequence of Commands");
+        return;
+    }
+
+    if (tls_upgrade_pending_) {
+        reply_code(503, "TLS already pending");
+        return;
+    }
+
+    if (loop_.is_tls_active(conn_id_)) {
+        reply_code(503, "TLS Already Active");
         return;
     }
 

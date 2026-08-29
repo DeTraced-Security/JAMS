@@ -287,6 +287,11 @@ void SubmissionServer::cmd_ehlo(std::string_view arg) {
 }
 
 void SubmissionServer::cmd_starttls() {
+    if (tls_upgrade_pending_) {
+        reply(503, "TLS already pending");
+        return;
+    }
+
     if (loop_.is_tls_active(conn_id_)) {
         reply(503, "TLS Already Active");
         return;
@@ -401,7 +406,7 @@ void SubmissionServer::cmd_rcpt(std::string_view arg) {
 
     // RFC 5321 4.5.3: max 100
     if (env_.rcpt_to.size() >= 100) {
-        reply(452, "Too Many Recipients");
+        reply(452, "4.5.3 Too Many Recipients");
         return;
     }
 

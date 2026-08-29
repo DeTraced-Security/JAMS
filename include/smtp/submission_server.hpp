@@ -58,6 +58,15 @@ namespace SMTP
             return pending_close_;
         }
 
+        bool wants_tls_upgrade() const override
+        {
+            return tls_upgrade_pending_;
+        }
+
+        void clear_tls_upgrade() override
+        {
+            tls_upgrade_pending_ = false;
+        }
     private:
         DKIM::Signer dkim_signer_;
 

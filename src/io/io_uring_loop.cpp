@@ -380,6 +380,23 @@ void Async::IoUringLoop::on_write(uint64_t conn_id, int res) {
 
     bit->second.write_pending = false;
 
+    auto sit = sessions_.find(conn_id);
+    if (sit != sessions_.end() && sit->second->wants_tls_upgrade()) {
+        sit->second->clear_tls_upgrade();
+        upgrade_tls(conn_id);
+
+        // re-arm read to receive hello again
+        if (bit != buffers_.end() && !bit->second.closing) {
+            io_uring_sqe* sqe = get_sqe();
+            io_uring_prep_recv(sqe, bit->second.fd, bit->second.read_buf.data(), bit->second.read_buf.size(), 0);
+            sqe->user_data = encode_userdata(op_type::Read, conn_id);
+            bit->second.inflight++;
+            submit();
+        }
+
+        return;
+    }
+
     // Send the next queued write
     if (!bit->second.write_queue.empty() && !bit->second.closing) {
         flush_write(conn_id);

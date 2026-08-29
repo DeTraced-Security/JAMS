@@ -76,6 +76,9 @@ int main(int argc, char* argv[]) {
     if (argc > 1 && std::string(argv[1]) == "--no-logs") {
         logs_enabled = false;
     }
+    else {
+        logs_enabled = true;
+    }
 
     Config cfg;
 
