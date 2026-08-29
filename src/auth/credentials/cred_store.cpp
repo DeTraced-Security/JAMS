@@ -189,71 +189,85 @@ bool CredentialStore::add_user(const std::string& username, const std::string& p
 }
 
 bool CredentialStore::verify(const std::string& username, const std::string& passwd, const std::string& ip) {
+    // Username safety check
+    for (char c : username) {
+        if (!std::isalnum(c) && c != '.' && c != '-' && c != '_' && c != '+') {
+            logger.warn("[AUTH] rejected unsafe username");
+            return false;
+        }
+    }
+
     if (username.empty() || passwd.empty()) {
         return false;
     }
 
-    sqlite3_stmt* stmt = nullptr;
-    const char* sql = "SELECT hash, iterations, last_known_ip FROM users "
-        "WHERE username = ? AND active = 1";
+    try {
+        sqlite3_stmt* stmt = nullptr;
+        const char* sql = "SELECT hash, iterations, last_known_ip FROM users "
+            "WHERE username = ? AND active = 1";
 
-    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
-        logger.error("[auth] SQL Account Verification perpare failed: " + std::string(sqlite3_errmsg(db_)));
-        return false;
-    }
-
-    sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
-
-    auto hashed_ip = hash_data(ip);
-    bool unknown_ip{ false };
-
-    bool user_found = false;
-    std::string stored_hash, salt;
-    int iterations = 100000;
-
-    if (sqlite3_step(stmt) == SQLITE_ROW) {
-        const char* hash_cstr = reinterpret_cast<const char*>(
-            sqlite3_column_text(stmt, 0)
-            );
-        const char* ip_cstr = reinterpret_cast<const char*>(
-            sqlite3_column_text(stmt, 3)
-            );
-        // Safe-guard against potential NULL values that may crash the call
-        if (!hash_cstr) {
-            sqlite3_finalize(stmt);
+        if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+            logger.error("[auth] SQL Account Verification perpare failed: " + std::string(sqlite3_errmsg(db_)));
             return false;
         }
 
-        if (std::string(ip_cstr) != hashed_ip.hash) {
-            unknown_ip = true;
+        sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
+
+        auto hashed_ip = hash_data(ip);
+        bool unknown_ip{ false };
+
+        bool user_found = false;
+        std::string stored_hash, salt;
+        int iterations = 100000;
+
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            const char* hash_cstr = reinterpret_cast<const char*>(
+                sqlite3_column_text(stmt, 0)
+                );
+            const char* ip_cstr = reinterpret_cast<const char*>(
+                sqlite3_column_text(stmt, 2)
+                );
+            // Safe-guard against potential NULL values that may crash the call
+            if (!hash_cstr) {
+                sqlite3_finalize(stmt);
+                return false;
+            }
+
+            if (ip_cstr && std::string(ip_cstr) != hashed_ip.hash) {
+                unknown_ip = true;
+            }
+
+            salt = derive_salt(username);
+            stored_hash = hash_cstr;
+            iterations = sqlite3_column_int(stmt, 2);
+
+            user_found = true;
         }
 
-        salt = derive_salt(username);
-        stored_hash = hash_cstr;
-        iterations = sqlite3_column_int(stmt, 2);
+        sqlite3_finalize(stmt);
 
-        user_found = true;
+        // Constant-Time evaluation - timing attack prevention
+        std::string computed = pbkdf2(
+            passwd, salt.empty() ? "deadbeef" : salt,
+            iterations
+        );
+
+        const bool auth_ok = constant_time_eq(computed, stored_hash);
+
+        if (!user_found) {
+            return false;
+        }
+
+        if (unknown_ip) {
+            notify_unknown_ip(username, ip);
+        }
+
+        return auth_ok;
     }
-
-    sqlite3_finalize(stmt);
-
-    // Constant-Time evaluation - timing attack prevention
-    std::string computed = pbkdf2(
-        passwd, salt.empty() ? "deadbeef" : salt,
-        iterations
-    );
-
-    const bool auth_ok = constant_time_eq(computed, stored_hash);
-
-    if (!user_found) {
+    catch (const std::exception& ex) {
+        logger.error("[AUTH] verify() exception: " + std::string(ex.what()));
         return false;
     }
-
-    if (unknown_ip) {
-        notify_unknown_ip(username, ip);
-    }
-
-    return auth_ok;
 }
 
 bool CredentialStore::deactivate_user(const std::string& username) {

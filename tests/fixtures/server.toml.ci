@@ -1,5 +1,5 @@
 [server]
-hostname = "localhost"
+hostname = "test.local"
 mailroot = "/tmp/jams/mail/"
 
 [ports]
