@@ -239,7 +239,7 @@ bool CredentialStore::verify(const std::string& username, const std::string& pas
 
             salt = derive_salt(username);
             stored_hash = hash_cstr;
-            iterations = sqlite3_column_int(stmt, 2);
+            iterations = sqlite3_column_int(stmt, 1);
 
             user_found = true;
         }
@@ -328,16 +328,16 @@ bool CredentialStore::change_password(
 
     std::string stored_hash = reinterpret_cast<const char*>(sqlite3_column_text(sel, 0));
     const std::string stored_salt = derive_salt(username);
-    const int stored_iterations = sqlite3_column_int(sel, 2);
+    const int stored_iterations = sqlite3_column_int(sel, 1);
 
     sqlite3_finalize(sel);
 
-    auto check = hash_password(old_passwd, stored_iterations);
+    auto check = hash_password(old_passwd, username, stored_iterations);
     if (!constant_time_eq(check.hash, stored_hash)) {
         return false;
     }
 
-    auto hashed_new = hash_password(new_passwd, 100000);
+    auto hashed_new = hash_password(new_passwd, username, 100000);
     sqlite3_stmt* upd{ nullptr };
 
     if (sqlite3_prepare_v2(db_, "UPDATE users SET hash = ?, iterations = ? WHERE username = ?", -1, &upd, nullptr) != SQLITE_OK) {
